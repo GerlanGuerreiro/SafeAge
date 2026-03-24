@@ -1,7 +1,44 @@
-fastapi
-uvicorn
-paho-mqtt
-python-dotenv
-psycopg2-binary
-requests
-paho-mqtt
+# =============================================================================
+# Sistema de Monitoramento Residencial para Idosos
+# requirements.txt
+#
+# Boas práticas:
+# - Versões pinadas com ~= (compatível com patch updates, bloqueado em minor)
+# - Comentários explicando POR QUE cada dependência existe
+# - Separadas por grupo funcional
+# =============================================================================
+
+# ── API ────────────────────────────────────────────────────────────────────
+fastapi~=0.111.0           # Framework web assíncrono
+uvicorn[standard]~=0.29.0  # Servidor ASGI (inclui websockets e uvloop)
+
+# ── Banco de dados ─────────────────────────────────────────────────────────
+sqlalchemy~=2.0.30         # ORM moderno com suporte async
+asyncpg~=0.29.0            # Driver PostgreSQL assíncrono (mais rápido que psycopg2)
+alembic~=1.13.0            # Migrações de schema do banco
+
+# ── MQTT ───────────────────────────────────────────────────────────────────
+paho-mqtt~=1.6.1           # Cliente MQTT — protocolo de mensageria leve
+
+# ── Logging estruturado ────────────────────────────────────────────────────
+# loguru: substitui logging padrão do Python
+# Vantagens: API simples, JSON nativo, rotação de arquivos, colorize, contexto
+loguru~=0.7.2
+
+# ── Configuração e segurança ───────────────────────────────────────────────
+# pydantic-settings: validação tipada de variáveis de ambiente
+# Fase 1 item 3: substitui os.getenv() espalhados pelo código
+pydantic-settings~=2.2.0
+pydantic~=2.7.0            # Validação de dados (já incluso no FastAPI, pin explícito)
+
+# ── HTTP / notificações ────────────────────────────────────────────────────
+httpx~=0.27.0              # Cliente HTTP assíncrono (para envio de alertas Telegram)
+
+# ── Resiliência ────────────────────────────────────────────────────────────
+# tenacity: retry com backoff exponencial
+# Fase 2: usado para reconexão MQTT e operações de banco com falha transitória
+tenacity~=8.3.0
+
+# ── Dev / teste (não instalar em produção) ─────────────────────────────────
+# Para instalar apenas prod: pip install -r requirements.txt
+# Para instalar dev também:  pip install -r requirements-dev.txt
