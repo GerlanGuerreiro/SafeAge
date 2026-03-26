@@ -3,8 +3,11 @@ main.py
 -------
 Ponto de entrada da aplicação FastAPI.
 
-O consumidor MQTT roda como asyncio background task dentro do mesmo processo,
-iniciado no lifespan — sem precisar de um segundo container ou supervisor.
+Startup order:
+1. Logging configurado
+2. Tabelas do banco criadas (se não existirem)
+3. Consumidor MQTT iniciado como background task
+4. API HTTP disponível
 """
 
 import asyncio
@@ -25,11 +28,17 @@ async def lifespan(app: FastAPI):
     # ── STARTUP ────────────────────────────────────────────────────────────
     logger.info("Iniciando Sistema de Monitoramento Residencial")
 
-    # Importa aqui para garantir que o logging já está configurado
-    from consumidor_mqtt import iniciar_consumidor
+    # 1. Cria tabelas do banco (seguro rodar múltiplas vezes)
+    try:
+        from modelos import criar_tabelas
+        await asyncio.to_thread(criar_tabelas)
+    except Exception as e:
+        # Log mas não impede o startup — banco pode estar temporariamente
+        # indisponível e reconectar depois
+        logger.error("Falha ao criar tabelas no banco", erro=str(e))
 
-    # Cria a task do consumidor MQTT em background
-    # create_task() não bloqueia — a API HTTP já está disponível enquanto conecta
+    # 2. Inicia consumidor MQTT como background task
+    from consumidor_mqtt import iniciar_consumidor
     task_mqtt = asyncio.create_task(iniciar_consumidor())
     logger.info("Consumidor MQTT iniciado como background task")
 
@@ -40,12 +49,11 @@ async def lifespan(app: FastAPI):
     # ── SHUTDOWN ───────────────────────────────────────────────────────────
     logger.info("Encerrando Sistema de Monitoramento Residencial")
 
-    # Cancela a task do consumidor MQTT de forma limpa
     task_mqtt.cancel()
     try:
         await task_mqtt
     except asyncio.CancelledError:
-        pass  # esperado — o consumidor trata CancelledError internamente
+        pass
 
     logger.info("Sistema encerrado com sucesso")
 
@@ -54,9 +62,8 @@ def criar_app() -> FastAPI:
     app = FastAPI(
         title="Sistema de Monitoramento Residencial para Idosos",
         description=(
-            "API para gerenciamento de eventos de monitoramento detectados "
-            "via visão computacional (Frigate NVR). "
-            "Detecta quedas, inatividade e comportamentos anômalos."
+            "API para gerenciamento de eventos detectados via visão computacional. "
+            "Detecta quedas, imobilidade e ausência prolongada."
         ),
         version="1.0.0",
         lifespan=lifespan,
@@ -64,11 +71,7 @@ def criar_app() -> FastAPI:
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
-        logger.debug(
-            "Requisição recebida",
-            method=request.method,
-            path=request.url.path,
-        )
+        logger.debug("Requisição recebida", method=request.method, path=request.url.path)
         response = await call_next(request)
         logger.debug(
             "Requisição concluída",
@@ -80,16 +83,8 @@ def criar_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def handler_excecao_geral(request: Request, exc: Exception):
-        logger.exception(
-            "Erro não tratado na requisição",
-            method=request.method,
-            path=request.url.path,
-            erro=str(exc),
-        )
-        return JSONResponse(
-            status_code=500,
-            content={"erro": "Erro interno do servidor"},
-        )
+        logger.exception("Erro não tratado", method=request.method, path=request.url.path)
+        return JSONResponse(status_code=500, content={"erro": "Erro interno do servidor"})
 
     @app.get("/health", tags=["infra"])
     async def health_check():
@@ -100,7 +95,6 @@ def criar_app() -> FastAPI:
 
 
 app = criar_app()
-
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

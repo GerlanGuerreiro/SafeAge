@@ -15,6 +15,7 @@ uvicorn[standard]~=0.29.0  # Servidor ASGI (inclui websockets e uvloop)
 # ── Banco de dados ─────────────────────────────────────────────────────────
 sqlalchemy~=2.0.30         # ORM moderno com suporte async
 asyncpg~=0.29.0            # Driver PostgreSQL assíncrono (mais rápido que psycopg2)
+psycopg2-binary~=2.9.9     # Driver PostgreSQL síncrono — usado pelo banco_dados.py
 alembic~=1.13.0            # Migrações de schema do banco
 
 # ── MQTT ───────────────────────────────────────────────────────────────────
