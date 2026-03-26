@@ -36,3 +36,4 @@ __pycache__/
 
 docs/
 observacoes.md
+frigate/config.yml

@@ -1,30 +1,22 @@
 """
 consumidor_mqtt.py
 ------------------
-Consome eventos do broker MQTT publicados pelo Frigate NVR.
+Consumidor MQTT integrado ao loop asyncio do FastAPI.
 
-Responsabilidades:
-- Conectar ao broker Mosquitto
-- Subscrever nos tópicos relevantes do Frigate
-- Parsear o payload JSON
-- Despachar para a camada de análise comportamental
+Por que async em vez de loop_forever()?
+- loop_forever() é BLOQUEANTE — trava a thread e impede o uvicorn de funcionar
+- asyncio permite rodar o consumidor MQTT em paralelo com a API HTTP
+- Um único processo, sem necessidade de supervisor ou segundo container
 
-O que mudou em relação à versão anterior:
-- print() → logger estruturado com contexto
-- Variáveis de ambiente via pydantic-settings (Fase 1, item 3)
-- Reconexão automática com backoff exponencial (Fase 2)
-  → Por enquanto: placeholder indicando onde implementar
-
-IMPORTANTE sobre MQTT + Frigate:
-Os tópicos seguem o padrão:
-  frigate/events           → todos os eventos de detecção
-  frigate/<camera>/person  → eventos de pessoa numa câmera específica
-  frigate/+/person         → wildcard para todas as câmeras
+Fluxo de execução:
+  lifespan (main.py)
+    └── asyncio.create_task(iniciar_consumidor())
+          └── loop: conecta → subscreve → processa mensagens → reconecta se cair
 """
 
+import asyncio
 import json
 import os
-import time
 
 import paho.mqtt.client as mqtt
 
@@ -32,241 +24,164 @@ from core.logging_config import get_logger, LogContexto
 
 logger = get_logger(__name__)
 
-
 # ---------------------------------------------------------------------------
-# Configuração via variáveis de ambiente
+# Configuração
 # ---------------------------------------------------------------------------
-# TODO Fase 1 item 3: mover para core/config.py com pydantic-settings
-# Por ora, mantemos os os.getenv com valores padrão explícitos
-
-BROKER_HOST    = os.getenv("ENDERECO_BROKER_MQTT", "localhost")
+BROKER_HOST    = os.getenv("ENDERECO_BROKER_MQTT", "broker_mqtt")
 BROKER_PORT    = int(os.getenv("PORTA_BROKER_MQTT", "1883"))
 TOPICO_EVENTOS = os.getenv("TOPICO_MQTT_FRIGATE", "frigate/events")
 CLIENT_ID      = "monitoramento-backend"
 
+# Fila asyncio: ponte entre o callback síncrono do paho e o loop async
+_fila_mensagens: asyncio.Queue = asyncio.Queue()
+
 
 # ---------------------------------------------------------------------------
-# Callbacks MQTT
+# Callbacks síncronos do paho (rodam na thread interna do paho)
 # ---------------------------------------------------------------------------
 
-def ao_conectar(client: mqtt.Client, userdata, flags, rc: int) -> None:
-    """
-    Callback disparado quando a conexão com o broker é estabelecida ou falha.
-
-    rc (return code) indica o resultado:
-    0 = sucesso, 1-5 = diferentes tipos de falha
-    """
-    codigos_retorno = {
-        0: "Conexão bem-sucedida",
-        1: "Protocolo incorreto",
-        2: "Identificador inválido",
-        3: "Servidor indisponível",
-        4: "Credenciais inválidas",
-        5: "Não autorizado",
-    }
-
-    mensagem = codigos_retorno.get(rc, f"Código desconhecido: {rc}")
-
+def _ao_conectar(client, userdata, flags, rc):
     if rc == 0:
         logger.info(
             "Conectado ao broker MQTT",
-            **{
-                LogContexto.TOPICO_MQTT: TOPICO_EVENTOS,
-                "broker": BROKER_HOST,
-                "porta": BROKER_PORT,
-            }
+            broker=BROKER_HOST,
+            porta=BROKER_PORT,
+            **{LogContexto.TOPICO_MQTT: TOPICO_EVENTOS},
         )
-        # Subscreve no tópico após conexão bem-sucedida
         client.subscribe(TOPICO_EVENTOS)
         logger.debug("Subscrito no tópico", topico=TOPICO_EVENTOS)
     else:
-        # ERRO: não loga como exception (sem traceback), mas como error com contexto
-        logger.error(
-            "Falha ao conectar no broker MQTT",
-            broker=BROKER_HOST,
-            porta=BROKER_PORT,
-            codigo_retorno=rc,
-            detalhe=mensagem,
-        )
+        logger.error("Falha na conexão MQTT", codigo_retorno=rc)
 
 
-def ao_desconectar(client: mqtt.Client, userdata, rc: int) -> None:
-    """
-    Callback disparado quando a conexão é encerrada.
-
-    rc == 0 → desconexão intencional (shutdown limpo)
-    rc != 0 → desconexão inesperada (rede caiu, broker reiniciou, etc.)
-    """
+def _ao_desconectar(client, userdata, rc):
     if rc == 0:
         logger.info("Desconectado do broker MQTT (encerramento limpo)")
     else:
-        # Desconexão inesperada — log como warning pois o sistema tentará reconectar
-        logger.warning(
-            "Desconexão inesperada do broker MQTT",
-            codigo_retorno=rc,
-            nota="Reconexão automática será tentada (Fase 2)",
-        )
+        logger.warning("Desconexão inesperada do broker MQTT", codigo_retorno=rc)
 
 
-def ao_receber_mensagem(
-    client: mqtt.Client, userdata, message: mqtt.MQTTMessage
-) -> None:
+def _ao_receber_mensagem(client, userdata, message):
     """
-    Callback principal — disparado para cada mensagem recebida.
-
-    Fluxo:
-    1. Decodifica o payload JSON
-    2. Extrai campos relevantes do evento Frigate
-    3. Loga com contexto estruturado
-    4. Despacha para análise comportamental
-
-    Formato do payload Frigate (simplificado):
-    {
-        "type": "new" | "update" | "end",
-        "before": { "id": "...", "camera": "...", "label": "person", ... },
-        "after":  { "id": "...", "camera": "...", "label": "person",
-                    "box": [x, y, width, height], "score": 0.87 }
-    }
+    Callback síncrono do paho — NÃO pode fazer await aqui.
+    Coloca a mensagem na fila para ser processada pelo loop async.
     """
-    topico  = message.topic
-    payload = message.payload
-
-    # ── 1. Parse do JSON ───────────────────────────────────────────────────
     try:
-        dados = json.loads(payload.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        logger.warning(
-            "Payload MQTT inválido — não é JSON válido",
+        payload = json.loads(message.payload.decode("utf-8"))
+        _fila_mensagens.put_nowait(payload)
+    except Exception as e:
+        logger.warning("Payload MQTT inválido", erro=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Processador async — consome a fila e chama a análise comportamental
+# ---------------------------------------------------------------------------
+
+async def _processar_fila():
+    """
+    Loop assíncrono que consome mensagens da fila e as processa.
+    Roda indefinidamente até o shutdown da aplicação.
+    """
+    logger.info("Processador de fila MQTT iniciado")
+
+    while True:
+        dados = await _fila_mensagens.get()
+
+        tipo_evento = dados.get("type", "desconhecido")
+        after       = dados.get("after", {})
+        camera_id   = after.get("camera", "desconhecida")
+        label       = after.get("label", "desconhecido")
+        confianca   = after.get("score", 0.0)
+        evento_id   = after.get("id", "sem-id")
+
+        logger.info(
+            "Evento MQTT processado",
             **{
-                LogContexto.TOPICO_MQTT: topico,
-                "payload_bruto": payload[:200],  # Limita para não poluir o log
-                "erro": str(e),
-            }
+                LogContexto.CAMERA_ID:   camera_id,
+                LogContexto.TIPO_EVENTO: tipo_evento,
+                LogContexto.CONFIANCA:   round(confianca, 3),
+                LogContexto.EVENTO_ID:   evento_id,
+                "label":                 label,
+            },
         )
-        return
 
-    # ── 2. Extração de campos do evento Frigate ────────────────────────────
-    tipo_evento  = dados.get("type", "desconhecido")
-    after        = dados.get("after", {})
-    camera_id    = after.get("camera", "desconhecida")
-    label        = after.get("label", "desconhecido")
-    confianca    = after.get("score", 0.0)
-    evento_id    = after.get("id", "sem-id")
+        if label != "person":
+            logger.debug("Evento ignorado (não é person)", label=label)
+            _fila_mensagens.task_done()
+            continue
 
-    # ── 3. Log estruturado com todos os campos relevantes ──────────────────
-    # Note: usamos as constantes de LogContexto para padronizar os campos
-    logger.info(
-        "Evento MQTT recebido",
-        **{
-            LogContexto.CAMERA_ID:   camera_id,
-            LogContexto.TIPO_EVENTO: tipo_evento,
-            LogContexto.CONFIANCA:   round(confianca, 3),
-            LogContexto.EVENTO_ID:   evento_id,
-            LogContexto.TOPICO_MQTT: topico,
-            "label": label,
-        }
-    )
-
-    # ── 4. Filtragem: processa apenas eventos de pessoa ────────────────────
-    if label != "person":
-        logger.debug(
-            "Evento ignorado (label não é 'person')",
-            label=label,
-            **{LogContexto.CAMERA_ID: camera_id}
-        )
-        return
-
-    # ── 5. Despacho para análise comportamental ────────────────────────────
-    # TODO: importar e chamar analise_comportamento.processar_evento(dados)
-    # Por ora, apenas loga o despacho
-    logger.debug(
-        "Despachando evento para análise comportamental",
-        **{
-            LogContexto.EVENTO_ID:   evento_id,
-            LogContexto.CAMERA_ID:   camera_id,
-            LogContexto.TIPO_EVENTO: tipo_evento,
-        }
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cliente MQTT
-# ---------------------------------------------------------------------------
-
-def criar_cliente_mqtt() -> mqtt.Client:
-    """
-    Cria e configura o cliente MQTT com os callbacks registrados.
-
-    Retorna o cliente pronto para conectar (mas sem chamar connect() ainda).
-    Isso permite testar a configuração dos callbacks separadamente da conexão.
-    """
-    client = mqtt.Client(client_id=CLIENT_ID, clean_session=True)
-
-    # Registra os callbacks
-    client.on_connect    = ao_conectar
-    client.on_disconnect = ao_desconectar
-    client.on_message    = ao_receber_mensagem
-
-    # TODO Fase 1 item 3: credenciais MQTT via pydantic-settings
-    usuario_mqtt = os.getenv("USUARIO_MQTT")
-    senha_mqtt   = os.getenv("SENHA_MQTT")
-    if usuario_mqtt and senha_mqtt:
-        client.username_pw_set(usuario_mqtt, senha_mqtt)
-        logger.debug("Autenticação MQTT configurada", usuario=usuario_mqtt)
-
-    return client
-
-
-def iniciar_consumidor() -> None:
-    """
-    Inicia o loop de consumo MQTT com tentativa de conexão.
-
-    TODO Fase 2: substituir este loop simples por reconexão com
-    backoff exponencial usando tenacity:
-
-        from tenacity import retry, wait_exponential, stop_after_attempt
-        @retry(wait=wait_exponential(min=1, max=60), stop=stop_after_attempt(10))
-        def conectar_com_retry(): ...
-    """
-    client = criar_cliente_mqtt()
-
-    logger.info(
-        "Tentando conectar ao broker MQTT",
-        broker=BROKER_HOST,
-        porta=BROKER_PORT,
-    )
-
-    tentativas = 0
-    max_tentativas = 5
-
-    while tentativas < max_tentativas:
+        # ── Despacha para análise comportamental ──────────────────────────
         try:
-            client.connect(BROKER_HOST, BROKER_PORT, keepalive=60)
-            client.loop_forever()
-            break  # Se loop_forever() retorna, é encerramento limpo
-        except ConnectionRefusedError:
-            tentativas += 1
-            espera = min(2 ** tentativas, 30)  # Backoff simples: 2, 4, 8, 16, 30s
-            logger.warning(
-                "Conexão MQTT recusada, tentando novamente",
-                tentativa=tentativas,
-                max_tentativas=max_tentativas,
-                aguardando_segundos=espera,
-            )
-            time.sleep(espera)
+            from analise_comportamento import processar_evento
+            await asyncio.to_thread(processar_evento, dados)
         except Exception as e:
             logger.exception(
-                "Erro inesperado no consumidor MQTT",
+                "Erro ao processar evento",
                 erro=str(e),
+                **{LogContexto.EVENTO_ID: evento_id},
             )
-            break
 
-    if tentativas >= max_tentativas:
-        logger.error(
-            "Máximo de tentativas MQTT atingido — consumidor não iniciado",
-            max_tentativas=max_tentativas,
-        )
+        _fila_mensagens.task_done()
 
 
-if __name__ == "__main__":
-    iniciar_consumidor()
+# ---------------------------------------------------------------------------
+# Ponto de entrada público — chamado pelo lifespan do main.py
+# ---------------------------------------------------------------------------
+
+async def iniciar_consumidor() -> None:
+    """
+    Inicia o cliente MQTT e o processador de fila como tasks assíncronas.
+
+    Reconexão com backoff exponencial:
+    2s → 4s → 8s → 16s → 30s (máximo)
+    """
+    asyncio.create_task(_processar_fila())
+
+    client = mqtt.Client(client_id=CLIENT_ID, clean_session=True)
+    client.on_connect    = _ao_conectar
+    client.on_disconnect = _ao_desconectar
+    client.on_message    = _ao_receber_mensagem
+
+    espera = 2
+
+    while True:
+        try:
+            logger.info(
+                "Tentando conectar ao broker MQTT",
+                broker=BROKER_HOST,
+                porta=BROKER_PORT,
+            )
+            await asyncio.to_thread(client.connect, BROKER_HOST, BROKER_PORT, 60)
+
+            # loop_start() inicia thread interna do paho — NÃO bloqueia o asyncio
+            client.loop_start()
+            logger.info("Consumidor MQTT ativo e aguardando eventos")
+            espera = 2  # reseta backoff após conexão bem-sucedida
+
+            # Monitora a conexão a cada 5s
+            while True:
+                await asyncio.sleep(5)
+                if not client.is_connected():
+                    logger.warning("Cliente MQTT desconectou — reconectando...")
+                    client.loop_stop()
+                    break
+
+        except (ConnectionRefusedError, OSError) as e:
+            logger.warning(
+                "Broker MQTT indisponível",
+                erro=str(e),
+                aguardando_segundos=espera,
+            )
+            await asyncio.sleep(espera)
+            espera = min(espera * 2, 30)
+
+        except asyncio.CancelledError:
+            logger.info("Consumidor MQTT encerrado pelo shutdown")
+            client.loop_stop()
+            client.disconnect()
+            return
+
+        except Exception as e:
+            logger.exception("Erro inesperado no consumidor MQTT", erro=str(e))
+            await asyncio.sleep(espera)
+            espera = min(espera * 2, 30)

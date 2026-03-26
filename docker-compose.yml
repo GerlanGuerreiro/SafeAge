@@ -48,7 +48,7 @@ services:
 
     volumes:
       # CONFIGURAÇÃO COM CÂMERA REAL
-      - ./frigate/config.camera.yml:/config/config.yml
+      - ./frigate/config.yml:/config/config.yml
 
       # DIRETÓRIO DE MÍDIAS
       - ./midias:/media/frigate

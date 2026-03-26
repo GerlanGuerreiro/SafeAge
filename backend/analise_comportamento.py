@@ -9,6 +9,8 @@ Responsável por:
 """
 
 from datetime import datetime, timedelta
+from core.logging_config import get_logger
+logger = get_logger(__name__)
 
 # guarda último evento detectado
 ultimo_evento_camera = {}
@@ -66,3 +68,24 @@ def verificar_ausencia(camera):
         }
 
     return None
+
+def processar_evento(dados: dict) -> None:
+    """
+    Ponto de entrada único chamado pelo consumidor MQTT.
+    Orquestra registro e verificações de comportamento.
+    """
+    after     = dados.get("after", {})
+    camera    = after.get("camera", "desconhecida")
+
+    # Registra presença
+    registrar_evento(camera)
+
+    # Verifica comportamentos anômalos
+    alerta_imobilidade = verificar_imobilidade(camera)
+    alerta_ausencia    = verificar_ausencia(camera)
+
+    if alerta_imobilidade:
+        logger.warning("Alerta de imobilidade detectado", **alerta_imobilidade)
+
+    if alerta_ausencia:
+        logger.warning("Alerta de ausência prolongada detectada", **alerta_ausencia)
