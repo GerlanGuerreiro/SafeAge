@@ -1,53 +1,31 @@
-# ==========================================================
-# CONFIGURAÇÃO DO FRIGATE COM CÂMERA REAL
-# ==========================================================
-
 mqtt:
   host: broker_mqtt
   port: 1883
-
 detectors:
   cpu1:
     type: cpu
-
-
 cameras:
-
   camera_idoso:
-
     ffmpeg:
       inputs:
-
-        # STREAM PARA DETECÇÃO (resolução menor)
-        - path: rtsp://{USUARIO_CAMERA}:{SENHA_CAMERA}@{IP_CAMERA}:554/cam/realmonitor?channel=1&subtype=1
+        - path: rtsp://{CAMERA_USER}:{CAMERA_PASS}@{CAMERA_HOST}:{CAMERA_PORT}/{CAMERA_ENDPOINT}
           roles:
             - detect
-
-        # STREAM PARA GRAVAÇÃO (resolução maior)
-        - path: rtsp://{USUARIO_CAMERA}:{SENHA_CAMERA}@{IP_CAMERA}:554/cam/realmonitor?channel=1&subtype=0
+        - path: rtsp://{CAMERA_USER}:{CAMERA_PASS}@{CAMERA_HOST}:{CAMERA_PORT}/{CAMERA_ENDPOINT}
           roles:
             - record
-
-
     detect:
       enabled: true
       fps: 5
       width: 640
       height: 360
-
-
     objects:
       track:
         - person
-
-
     record:
       enabled: true
       continuous:
         days: 7
-
-
     snapshots:
       enabled: true
-
 version: 0.17-0

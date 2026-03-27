@@ -1,5 +1,4 @@
 services:
-
   # ========================================
   # BANCO POSTGRESQL
   # ========================================
@@ -7,15 +6,13 @@ services:
     image: postgres:15
     container_name: banco_monitoramento
     restart: unless-stopped
-
     environment:
       POSTGRES_USER: ${USUARIO_BANCO}
       POSTGRES_PASSWORD: ${SENHA_BANCO}
       POSTGRES_DB: ${NOME_BANCO}
-
+      TZ: America/Manaus
     volumes:
       - dados_postgres:/var/lib/postgresql/data
-
 
   # ========================================
   # BROKER MQTT
@@ -24,13 +21,13 @@ services:
     image: eclipse-mosquitto:2
     container_name: broker_mqtt
     restart: unless-stopped
-
+    environment:
+      TZ: America/Manaus
     ports:
       - "1883:1883"
 
-
   # ========================================
-  # FRIGATE (CONFIGURAÇÃO PADRÃO)
+  # FRIGATE
   # ========================================
   frigate:
     image: ghcr.io/blakeblackshear/frigate:stable
@@ -38,24 +35,18 @@ services:
     restart: unless-stopped
     privileged: true
     shm_size: "512mb"
-
     depends_on:
       - broker_mqtt
-
     ports:
       - "5000:5000"
       - "1935:1935"
-
     volumes:
-      # CONFIGURAÇÃO COM CÂMERA REAL
-      - ./frigate/config.yml:/config/config.yml
-
-      # DIRETÓRIO DE MÍDIAS
+      - ./frigate/config.camera.yml:/config_template/config.camera.yml:ro
+      - ./scripts/gerar_config_frigate.sh:/gerar_config.sh:ro
       - ./midias:/media/frigate
-
     env_file:
       - .env
-
+    entrypoint: ["/bin/sh", "/gerar_config.sh"]
 
   # ========================================
   # BACKEND FASTAPI
@@ -64,17 +55,13 @@ services:
     build: ./backend
     container_name: api_monitoramento
     restart: unless-stopped
-
     depends_on:
       - banco_dados
       - broker_mqtt
-
     env_file:
       - .env
-
     ports:
       - "8000:8000"
-
 
 volumes:
   dados_postgres:

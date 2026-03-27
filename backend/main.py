@@ -5,9 +5,10 @@ Ponto de entrada da aplicação FastAPI.
 
 Startup order:
 1. Logging configurado
-2. Tabelas do banco criadas (se não existirem)
-3. Consumidor MQTT iniciado como background task
-4. API HTTP disponível
+2. Tabelas do banco criadas
+3. Teste de conexão Telegram (envia mensagem de "sistema online")
+4. Consumidor MQTT iniciado como background task
+5. API HTTP disponível
 """
 
 import asyncio
@@ -28,16 +29,22 @@ async def lifespan(app: FastAPI):
     # ── STARTUP ────────────────────────────────────────────────────────────
     logger.info("Iniciando Sistema de Monitoramento Residencial")
 
-    # 1. Cria tabelas do banco (seguro rodar múltiplas vezes)
+    # 1. Cria tabelas do banco
     try:
         from modelos import criar_tabelas
         await asyncio.to_thread(criar_tabelas)
     except Exception as e:
-        # Log mas não impede o startup — banco pode estar temporariamente
-        # indisponível e reconectar depois
         logger.error("Falha ao criar tabelas no banco", erro=str(e))
 
-    # 2. Inicia consumidor MQTT como background task
+    # 2. Testa conexão Telegram e envia mensagem de startup
+    try:
+        from notificador import testar_conexao
+        await testar_conexao()
+    except Exception as e:
+        # Não impede o startup — Telegram é opcional
+        logger.warning("Telegram indisponível no startup", erro=str(e))
+
+    # 3. Inicia consumidor MQTT
     from consumidor_mqtt import iniciar_consumidor
     task_mqtt = asyncio.create_task(iniciar_consumidor())
     logger.info("Consumidor MQTT iniciado como background task")
@@ -48,13 +55,11 @@ async def lifespan(app: FastAPI):
 
     # ── SHUTDOWN ───────────────────────────────────────────────────────────
     logger.info("Encerrando Sistema de Monitoramento Residencial")
-
     task_mqtt.cancel()
     try:
         await task_mqtt
     except asyncio.CancelledError:
         pass
-
     logger.info("Sistema encerrado com sucesso")
 
 
@@ -88,7 +93,6 @@ def criar_app() -> FastAPI:
 
     @app.get("/health", tags=["infra"])
     async def health_check():
-        """Health check para Docker e load balancers."""
         return {"status": "ok", "servico": "monitoramento-api"}
 
     return app
