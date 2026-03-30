@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 _ultimo_evento_camera: dict[str, datetime] = {}
 
-TEMPO_IMOBILIDADE = timedelta(minutes=15)
+TEMPO_IMOBILIDADE = timedelta(minutes=1)
 TEMPO_AUSENCIA    = timedelta(hours=2)
 
 JANELA_ANTI_SPAM_ALERTA = timedelta(minutes=30)

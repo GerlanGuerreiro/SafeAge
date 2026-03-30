@@ -43,3 +43,4 @@ tenacity~=8.3.0
 # ── Dev / teste (não instalar em produção) ─────────────────────────────────
 # Para instalar apenas prod: pip install -r requirements.txt
 # Para instalar dev também:  pip install -r requirements-dev.txt
+aiofiles~=23.2.1  # necessário para StaticFiles do FastAPI
