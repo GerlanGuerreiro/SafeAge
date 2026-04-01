@@ -2,42 +2,30 @@
 consumidor_mqtt.py
 ------------------
 Consumidor MQTT integrado ao loop asyncio do FastAPI.
-
-Por que async em vez de loop_forever()?
-- loop_forever() é BLOQUEANTE — trava a thread e impede o uvicorn de funcionar
-- asyncio permite rodar o consumidor MQTT em paralelo com a API HTTP
-- Um único processo, sem necessidade de supervisor ou segundo container
-
-Fluxo de execução:
-  lifespan (main.py)
-    └── asyncio.create_task(iniciar_consumidor())
-          └── loop: conecta → subscreve → processa mensagens → reconecta se cair
+Configuração lida de settings em vez de os.getenv().
 """
 
 import asyncio
 import json
-import os
 
 import paho.mqtt.client as mqtt
 
+from core.config import settings
 from core.logging_config import get_logger, LogContexto
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Configuração
-# ---------------------------------------------------------------------------
-BROKER_HOST    = os.getenv("ENDERECO_BROKER_MQTT", "broker_mqtt")
-BROKER_PORT    = int(os.getenv("PORTA_BROKER_MQTT", "1883"))
-TOPICO_EVENTOS = os.getenv("TOPICO_MQTT_FRIGATE", "frigate/events")
+# Lê configurações do settings centralizado — tipadas e validadas no startup
+BROKER_HOST    = settings.endereco_broker_mqtt
+BROKER_PORT    = settings.porta_broker_mqtt      # já é int, sem int() manual
+TOPICO_EVENTOS = settings.topico_mqtt_frigate
 CLIENT_ID      = "monitoramento-backend"
 
-# Fila asyncio: ponte entre o callback síncrono do paho e o loop async
 _fila_mensagens: asyncio.Queue = asyncio.Queue()
 
 
 # ---------------------------------------------------------------------------
-# Callbacks síncronos do paho (rodam na thread interna do paho)
+# Callbacks síncronos do paho
 # ---------------------------------------------------------------------------
 
 def _ao_conectar(client, userdata, flags, rc):
@@ -62,10 +50,6 @@ def _ao_desconectar(client, userdata, rc):
 
 
 def _ao_receber_mensagem(client, userdata, message):
-    """
-    Callback síncrono do paho — NÃO pode fazer await aqui.
-    Coloca a mensagem na fila para ser processada pelo loop async.
-    """
     try:
         payload = json.loads(message.payload.decode("utf-8"))
         _fila_mensagens.put_nowait(payload)
@@ -74,16 +58,11 @@ def _ao_receber_mensagem(client, userdata, message):
 
 
 # ---------------------------------------------------------------------------
-# Processador async — consome a fila e chama a análise comportamental
+# Processador async
 # ---------------------------------------------------------------------------
 
 async def _processar_fila():
-    """
-    Loop assíncrono que consome mensagens da fila e as processa.
-    Roda indefinidamente até o shutdown da aplicação.
-    """
     logger.info("Processador de fila MQTT iniciado")
-
     while True:
         dados = await _fila_mensagens.get()
 
@@ -110,7 +89,6 @@ async def _processar_fila():
             _fila_mensagens.task_done()
             continue
 
-        # ── Despacha para análise comportamental ──────────────────────────
         try:
             from analise_comportamento import processar_evento
             await asyncio.to_thread(processar_evento, dados)
@@ -125,15 +103,13 @@ async def _processar_fila():
 
 
 # ---------------------------------------------------------------------------
-# Ponto de entrada público — chamado pelo lifespan do main.py
+# Ponto de entrada público
 # ---------------------------------------------------------------------------
 
 async def iniciar_consumidor() -> None:
     """
-    Inicia o cliente MQTT e o processador de fila como tasks assíncronas.
-
-    Reconexão com backoff exponencial:
-    2s → 4s → 8s → 16s → 30s (máximo)
+    Inicia o cliente MQTT com reconexão automática (backoff exponencial).
+    Chamado pelo lifespan do main.py como asyncio background task.
     """
     asyncio.create_task(_processar_fila())
 
@@ -152,13 +128,10 @@ async def iniciar_consumidor() -> None:
                 porta=BROKER_PORT,
             )
             await asyncio.to_thread(client.connect, BROKER_HOST, BROKER_PORT, 60)
-
-            # loop_start() inicia thread interna do paho — NÃO bloqueia o asyncio
             client.loop_start()
             logger.info("Consumidor MQTT ativo e aguardando eventos")
-            espera = 2  # reseta backoff após conexão bem-sucedida
+            espera = 2
 
-            # Monitora a conexão a cada 5s
             while True:
                 await asyncio.sleep(5)
                 if not client.is_connected():

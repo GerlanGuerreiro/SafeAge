@@ -2,9 +2,9 @@
 banco_dados.py
 --------------
 Camada de acesso ao PostgreSQL.
+Usa settings centralizado em vez de os.getenv().
 """
 
-import os
 import asyncio
 from datetime import datetime
 from contextlib import contextmanager
@@ -12,31 +12,31 @@ from contextlib import contextmanager
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from core.config import settings
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def _parametros_conexao() -> dict:
-    return {
-        "host":            os.getenv("POSTGRES_HOST", "banco_dados"),
-        "database":        os.getenv("NOME_BANCO"),
-        "user":            os.getenv("USUARIO_BANCO"),
-        "password":        os.getenv("SENHA_BANCO"),
-        "connect_timeout": 5,
-    }
-
-
 @contextmanager
 def obter_conexao():
+    """
+    Context manager que abre e fecha a conexão automaticamente.
+    Parâmetros de conexão vêm de settings.conexao_postgres.
+    """
     conexao = None
     try:
-        conexao = psycopg2.connect(**_parametros_conexao())
+        conexao = psycopg2.connect(**settings.conexao_postgres)
         logger.debug("Conexão com PostgreSQL estabelecida")
         yield conexao
         conexao.commit()
     except psycopg2.OperationalError as e:
-        logger.error("Falha ao conectar ao PostgreSQL", erro=str(e))
+        logger.error(
+            "Falha ao conectar ao PostgreSQL",
+            erro=str(e),
+            host=settings.postgres_host,
+            banco=settings.nome_banco,
+        )
         raise
     except Exception as e:
         if conexao:
@@ -106,7 +106,7 @@ def salvar_alerta(tipo_alerta: str, camera: str, descricao: str) -> int | None:
 
 
 # ---------------------------------------------------------------------------
-# Leitura — usadas pelos endpoints da API
+# Leitura
 # ---------------------------------------------------------------------------
 
 def listar_eventos(
@@ -114,7 +114,6 @@ def listar_eventos(
     offset: int = 0,
     camera: str | None = None,
 ) -> list[dict]:
-    """Lista eventos paginados, opcionalmente filtrados por câmera."""
     filtro = "WHERE camera = %s" if camera else ""
     params = [camera, limite, offset] if camera else [limite, offset]
     sql = f"""
@@ -141,7 +140,6 @@ def listar_alertas(
     offset: int = 0,
     camera: str | None = None,
 ) -> list[dict]:
-    """Lista alertas paginados, opcionalmente filtrados por câmera."""
     filtro = "WHERE camera = %s" if camera else ""
     params = [camera, limite, offset] if camera else [limite, offset]
     sql = f"""
@@ -162,14 +160,6 @@ def listar_alertas(
 
 
 def obter_resumo() -> dict:
-    """
-    Retorna dados agregados para o dashboard:
-    - total de eventos e alertas
-    - eventos nas últimas 24h
-    - média de confiança
-    - cameras ativas
-    - últimos 5 alertas
-    """
     sql_totais = """
         SELECT
             (SELECT COUNT(*) FROM eventos_monitoramento)                            AS total_eventos,
@@ -182,36 +172,24 @@ def obter_resumo() -> dict:
     """
     sql_alertas_recentes = """
         SELECT tipo_alerta, camera, descricao, criado_em
-        FROM alertas
-        ORDER BY criado_em DESC
-        LIMIT 5;
+        FROM alertas ORDER BY criado_em DESC LIMIT 5;
     """
     sql_eventos_por_hora = """
-        SELECT
-            DATE_TRUNC('hour', criado_em) AS hora,
-            COUNT(*) AS quantidade
+        SELECT DATE_TRUNC('hour', criado_em) AS hora, COUNT(*) AS quantidade
         FROM eventos_monitoramento
         WHERE criado_em >= NOW() - INTERVAL '24 hours'
-        GROUP BY hora
-        ORDER BY hora;
+        GROUP BY hora ORDER BY hora;
     """
     try:
         with obter_conexao() as conexao:
             with conexao.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(sql_totais)
                 totais = dict(cursor.fetchone())
-
                 cursor.execute(sql_alertas_recentes)
                 alertas_recentes = [dict(r) for r in cursor.fetchall()]
-
                 cursor.execute(sql_eventos_por_hora)
                 eventos_por_hora = [dict(r) for r in cursor.fetchall()]
-
-        return {
-            **totais,
-            "alertas_recentes":  alertas_recentes,
-            "eventos_por_hora":  eventos_por_hora,
-        }
+        return {**totais, "alertas_recentes": alertas_recentes, "eventos_por_hora": eventos_por_hora}
     except Exception as e:
         logger.exception("Erro ao obter resumo", erro=str(e))
         return {}
