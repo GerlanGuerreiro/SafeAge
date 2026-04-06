@@ -51,22 +51,20 @@ NOME_ANTIGO_LEGIVEL="Sistema Inteligente de Monitoramento Residencial para Idoso
 
 # Arquivos textuais rastreados pelo git
 ARQUIVOS=$(git ls-files | grep -E "\.(md|html|js|jsx|ts|tsx|py|java|xml|json|yml|yaml|css|scss|txt)$" || true)
-
 TOTAL=0
-for arquivo in $ARQUIVOS; do
-  if grep -q "$NOME_ANTIGO" "$arquivo" 2>/dev/null; then
-    # Substitui versão com hífens
-    sed -i "s|$NOME_ANTIGO|SafeAge|g" "$arquivo"
-    echo "  ✓ $arquivo"
-    TOTAL=$((TOTAL + 1))
-  fi
-  if grep -q "$NOME_ANTIGO_LEGIVEL" "$arquivo" 2>/dev/null; do
-    # Substitui versão legível
-    sed -i "s|$NOME_ANTIGO_LEGIVEL|SafeAge|g" "$arquivo"
-    echo "  ✓ $arquivo (nome legível)"
-    TOTAL=$((TOTAL + 1))
-  fi
-done
+while IFS= read -r arquivo; do
+[ -z "$arquivo" ] && continue
+if grep -q "$NOME_ANTIGO" "$arquivo" 2>/dev/null; then
+sed -i "s|$NOME_ANTIGO|SafeAge|g" "$arquivo"
+echo "  ✓ $arquivo"
+TOTAL=$((TOTAL + 1))
+fi
+if grep -q "$NOME_ANTIGO_LEGIVEL" "$arquivo" 2>/dev/null; then
+sed -i "s|$NOME_ANTIGO_LEGIVEL|SafeAge|g" "$arquivo"
+echo "  ✓ $arquivo (nome legível)"
+TOTAL=$((TOTAL + 1))
+fi
+done <<< "$ARQUIVOS"
 
 echo -e "${GREEN}✓ $TOTAL arquivos atualizados${NC}"
 
