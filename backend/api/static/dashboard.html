@@ -3,53 +3,110 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoramento Residencial</title>
+<meta name="description" content="SafeAge — Inteligência que protege. Sistema de monitoramento residencial para idosos.">
+<title>SafeAge — Inteligência que protege</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
+  /* ── Paleta SafeAge ───────────────────────────────────────────────────── */
+  :root {
+    --color-primary:   #2A7FFF;
+    --color-secondary: #A9D6FF;
+    --color-bg:        #FFFFFF;
+    --color-surface:   #F4F9FF;
+    --color-border:    #D6EAFF;
+    --color-text:      #0D1F3C;
+    --color-muted:     #5A7A9F;
+    --color-danger:    #E8394A;
+    --color-warning:   #F59E0B;
+    --color-success:   #22C55E;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #0f1117;
-    color: #e2e8f0;
+    background: var(--color-surface);
+    color: var(--color-text);
     min-height: 100vh;
   }
 
+  /* ── Header ───────────────────────────────────────────────────────────── */
   header {
-    background: #1a1d27;
-    border-bottom: 1px solid #2d3148;
-    padding: 16px 24px;
+    background: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+    padding: 0 24px;
+    height: 64px;
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
 
-  header h1 { font-size: 18px; font-weight: 600; color: #fff; }
-  header h1 span { color: #6366f1; }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+  }
 
-  #status-badge {
+  .brand-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--color-primary);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-icon svg {
+    width: 22px;
+    height: 22px;
+    fill: #fff;
+  }
+
+  .brand-text { line-height: 1.2; }
+
+  .brand-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-primary);
+    letter-spacing: -0.3px;
+  }
+
+  .brand-slogan {
+    font-size: 11px;
+    color: var(--color-muted);
+    letter-spacing: 0.03em;
+  }
+
+  .status-badge {
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: #94a3b8;
+    color: var(--color-muted);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    padding: 6px 12px;
+    border-radius: 20px;
   }
 
   .dot {
     width: 8px; height: 8px;
     border-radius: 50%;
-    background: #22c55e;
+    background: var(--color-success);
     animation: pulse 2s infinite;
   }
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    50%       { opacity: 0.4; }
   }
 
+  /* ── Layout principal ─────────────────────────────────────────────────── */
   main { padding: 24px; max-width: 1200px; margin: 0 auto; }
 
-  /* Cards de métricas */
+  /* ── Cards de métricas ────────────────────────────────────────────────── */
   .metrics {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -58,39 +115,40 @@
   }
 
   .card {
-    background: #1a1d27;
-    border: 1px solid #2d3148;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 20px;
   }
 
   .card-label {
-    font-size: 12px;
-    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     margin-bottom: 8px;
   }
 
   .card-value {
     font-size: 32px;
     font-weight: 700;
-    color: #fff;
     line-height: 1;
+    color: var(--color-text);
   }
 
-  .card-value.accent { color: #6366f1; }
-  .card-value.green  { color: #22c55e; }
-  .card-value.amber  { color: #f59e0b; }
-  .card-value.red    { color: #ef4444; }
+  .card-value.primary { color: var(--color-primary); }
+  .card-value.success { color: var(--color-success); }
+  .card-value.danger  { color: var(--color-danger);  }
+  .card-value.warning { color: var(--color-warning); }
 
   .card-sub {
     font-size: 12px;
-    color: #475569;
+    color: var(--color-muted);
     margin-top: 6px;
   }
 
-  /* Layout inferior */
+  /* ── Layout inferior ──────────────────────────────────────────────────── */
   .bottom {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -102,15 +160,17 @@
   }
 
   .card h2 {
-    font-size: 14px;
-    font-weight: 500;
-    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     margin-bottom: 16px;
     padding-bottom: 12px;
-    border-bottom: 1px solid #2d3148;
+    border-bottom: 1px solid var(--color-border);
   }
 
-  /* Tabela de alertas */
+  /* ── Lista de alertas ─────────────────────────────────────────────────── */
   .alert-list { display: flex; flex-direction: column; gap: 10px; }
 
   .alert-item {
@@ -118,42 +178,42 @@
     align-items: flex-start;
     gap: 12px;
     padding: 12px;
-    background: #0f1117;
+    background: var(--color-surface);
     border-radius: 8px;
-    border-left: 3px solid #6366f1;
+    border-left: 3px solid var(--color-primary);
   }
 
-  .alert-item.imobilidade    { border-left-color: #f59e0b; }
-  .alert-item.ausencia       { border-left-color: #ef4444; }
+  .alert-item.imobilidade    { border-left-color: var(--color-warning); }
+  .alert-item.ausencia       { border-left-color: var(--color-danger);  }
 
   .alert-emoji { font-size: 20px; line-height: 1; }
 
-  .alert-body { flex: 1; }
-  .alert-tipo {
-    font-size: 12px;
-    font-weight: 600;
+  .alert-body  { flex: 1; }
+  .alert-tipo  {
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #94a3b8;
+    color: var(--color-muted);
   }
-  .alert-desc  { font-size: 13px; color: #e2e8f0; margin-top: 2px; }
-  .alert-time  { font-size: 11px; color: #475569; margin-top: 4px; }
+  .alert-desc  { font-size: 13px; color: var(--color-text); margin-top: 2px; }
+  .alert-time  { font-size: 11px; color: var(--color-muted); margin-top: 4px; }
 
   .empty {
     text-align: center;
-    color: #475569;
+    color: var(--color-muted);
     font-size: 13px;
     padding: 24px 0;
   }
 
-  /* Gráfico */
+  /* ── Gráfico ──────────────────────────────────────────────────────────── */
   .chart-wrap { position: relative; height: 220px; }
 
-  /* Atualização */
+  /* ── Footer info ──────────────────────────────────────────────────────── */
   #last-update {
     text-align: right;
     font-size: 11px;
-    color: #334155;
+    color: var(--color-muted);
     margin-top: 16px;
   }
 </style>
@@ -161,8 +221,19 @@
 <body>
 
 <header>
-  <h1>🏠 Monitoramento <span>Residencial</span></h1>
-  <div id="status-badge">
+  <a class="brand" href="/">
+    <div class="brand-icon">
+      <!-- Ícone: escudo com checkmark — simboliza proteção -->
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L4 5v6c0 5.25 3.5 10.15 8 11.35C16.5 21.15 20 16.25 20 11V5L12 2zm-1 13l-3-3 1.41-1.41L11 12.17l4.59-4.58L17 9l-6 6z"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <div class="brand-name">SafeAge</div>
+      <div class="brand-slogan">Inteligência que protege</div>
+    </div>
+  </a>
+  <div class="status-badge">
     <div class="dot"></div>
     <span>Sistema ativo</span>
   </div>
@@ -172,22 +243,22 @@
   <div class="metrics">
     <div class="card">
       <div class="card-label">Total de eventos</div>
-      <div class="card-value accent" id="total-eventos">—</div>
+      <div class="card-value primary" id="total-eventos">—</div>
       <div class="card-sub">desde o início</div>
     </div>
     <div class="card">
       <div class="card-label">Últimas 24h</div>
-      <div class="card-value green" id="eventos-24h">—</div>
+      <div class="card-value success" id="eventos-24h">—</div>
       <div class="card-sub">detecções recentes</div>
     </div>
     <div class="card">
       <div class="card-label">Total de alertas</div>
-      <div class="card-value red" id="total-alertas">—</div>
+      <div class="card-value danger" id="total-alertas">—</div>
       <div class="card-sub">imobilidade / ausência</div>
     </div>
     <div class="card">
       <div class="card-label">Confiança média</div>
-      <div class="card-value amber" id="media-confianca">—</div>
+      <div class="card-value warning" id="media-confianca">—</div>
       <div class="card-sub">score do modelo IA</div>
     </div>
     <div class="card">
@@ -199,13 +270,13 @@
 
   <div class="bottom">
     <div class="card">
-      <h2>📊 Eventos por hora (24h)</h2>
+      <h2>Eventos por hora (24h)</h2>
       <div class="chart-wrap">
         <canvas id="chart-eventos"></canvas>
       </div>
     </div>
     <div class="card">
-      <h2>🚨 Alertas recentes</h2>
+      <h2>Alertas recentes</h2>
       <div class="alert-list" id="lista-alertas">
         <div class="empty">Nenhum alerta registrado</div>
       </div>
@@ -219,9 +290,6 @@
 const API = window.location.origin;
 let chart = null;
 
-// ---------------------------------------------------------------------------
-// Formata datetime ISO para exibição local
-// ---------------------------------------------------------------------------
 function formatarData(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('pt-BR', {
@@ -230,18 +298,12 @@ function formatarData(iso) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Renderiza gráfico de eventos por hora
-// ---------------------------------------------------------------------------
 function renderizarGrafico(dados) {
-  const labels = dados.map(d => {
-    const h = new Date(d.hora);
-    return `${h.getHours().toString().padStart(2,'0')}h`;
-  });
+  const labels  = dados.map(d => `${new Date(d.hora).getHours().toString().padStart(2,'0')}h`);
   const valores = dados.map(d => d.quantidade);
 
   if (chart) {
-    chart.data.labels  = labels;
+    chart.data.labels = labels;
     chart.data.datasets[0].data = valores;
     chart.update('none');
     return;
@@ -255,8 +317,8 @@ function renderizarGrafico(dados) {
       datasets: [{
         label: 'Eventos',
         data: valores,
-        backgroundColor: 'rgba(99, 102, 241, 0.6)',
-        borderColor:     'rgba(99, 102, 241, 1)',
+        backgroundColor: 'rgba(42, 127, 255, 0.5)',
+        borderColor:     '#2A7FFF',
         borderWidth: 1,
         borderRadius: 4,
       }]
@@ -266,23 +328,13 @@ function renderizarGrafico(dados) {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: {
-          ticks: { color: '#475569', font: { size: 11 } },
-          grid:  { color: '#1e2235' }
-        },
-        y: {
-          ticks: { color: '#475569', font: { size: 11 }, stepSize: 1 },
-          grid:  { color: '#1e2235' },
-          beginAtZero: true
-        }
+        x: { ticks: { color: '#5A7A9F', font: { size: 11 } }, grid: { color: '#D6EAFF' } },
+        y: { ticks: { color: '#5A7A9F', font: { size: 11 }, stepSize: 1 }, grid: { color: '#D6EAFF' }, beginAtZero: true }
       }
     }
   });
 }
 
-// ---------------------------------------------------------------------------
-// Emojis e classes por tipo de alerta
-// ---------------------------------------------------------------------------
 const ALERTAS_CONFIG = {
   imobilidade:         { emoji: '⚠️', classe: 'imobilidade' },
   ausencia_prolongada: { emoji: '👻', classe: 'ausencia'    },
@@ -291,69 +343,53 @@ const ALERTAS_CONFIG = {
 
 function renderizarAlertas(alertas) {
   const container = document.getElementById('lista-alertas');
-
   if (!alertas || alertas.length === 0) {
     container.innerHTML = '<div class="empty">Nenhum alerta registrado</div>';
     return;
   }
-
   container.innerHTML = alertas.map(a => {
     const cfg = ALERTAS_CONFIG[a.tipo_alerta] || { emoji: '🔔', classe: '' };
     return `
       <div class="alert-item ${cfg.classe}">
         <div class="alert-emoji">${cfg.emoji}</div>
         <div class="alert-body">
-          <div class="alert-tipo">${a.tipo_alerta.replace('_', ' ')}</div>
+          <div class="alert-tipo">${a.tipo_alerta.replace(/_/g, ' ')}</div>
           <div class="alert-desc">${a.descricao || '—'}</div>
           <div class="alert-time">📷 ${a.camera} · ${formatarData(a.criado_em)}</div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
-// ---------------------------------------------------------------------------
-// Busca dados da API e atualiza o dashboard
-// ---------------------------------------------------------------------------
 async function atualizarDashboard() {
   try {
     const res = await fetch(`${API}/api/v1/dashboard/resumo`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const dados = await res.json();
 
-    // Métricas
-    document.getElementById('total-eventos').textContent =
-      dados.total_eventos ?? '0';
-    document.getElementById('eventos-24h').textContent =
-      dados.eventos_24h ?? '0';
-    document.getElementById('total-alertas').textContent =
-      dados.total_alertas ?? '0';
+    document.getElementById('total-eventos').textContent  = dados.total_eventos  ?? '0';
+    document.getElementById('eventos-24h').textContent    = dados.eventos_24h    ?? '0';
+    document.getElementById('total-alertas').textContent  = dados.total_alertas  ?? '0';
     document.getElementById('media-confianca').textContent =
       dados.media_confianca ? `${(dados.media_confianca * 100).toFixed(1)}%` : '—';
-    document.getElementById('cameras-ativas').textContent =
-      dados.cameras_ativas ?? '0';
+    document.getElementById('cameras-ativas').textContent = dados.cameras_ativas ?? '0';
 
-    // Gráfico
-    if (dados.eventos_por_hora?.length > 0) {
-      renderizarGrafico(dados.eventos_por_hora);
-    }
-
-    // Alertas recentes
+    if (dados.eventos_por_hora?.length > 0) renderizarGrafico(dados.eventos_por_hora);
     renderizarAlertas(dados.alertas_recentes);
 
-    // Timestamp
     document.getElementById('last-update').textContent =
       `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+
+    document.querySelector('.dot').style.background = '#22C55E';
 
   } catch (err) {
     console.error('Erro ao buscar dados:', err);
     document.getElementById('last-update').textContent =
       `Erro ao conectar com a API — ${new Date().toLocaleTimeString('pt-BR')}`;
-    document.querySelector('.dot').style.background = '#ef4444';
+    document.querySelector('.dot').style.background = '#E8394A';
   }
 }
 
-// Atualiza na carga e depois a cada 30 segundos
 atualizarDashboard();
 setInterval(atualizarDashboard, 30000);
 </script>

@@ -1,6 +1,7 @@
 """
 main.py
 -------
+SafeAge — Inteligência que protege.
 Ponto de entrada da aplicação FastAPI.
 """
 
@@ -18,13 +19,12 @@ from core.logging_config import configurar_logging, get_logger
 configurar_logging()
 logger = get_logger(__name__)
 
-# Diretório de arquivos estáticos (dashboard)
 STATIC_DIR = Path(__file__).parent / "api" / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Iniciando Sistema de Monitoramento Residencial")
+    logger.info("Iniciando SafeAge — Inteligência que protege")
 
     try:
         from modelos import criar_tabelas
@@ -41,58 +41,54 @@ async def lifespan(app: FastAPI):
     from consumidor_mqtt import iniciar_consumidor
     task_mqtt = asyncio.create_task(iniciar_consumidor())
     logger.info("Consumidor MQTT iniciado como background task")
-    logger.info("Sistema pronto para receber eventos")
+    logger.info("SafeAge pronto para monitorar")
 
     yield
 
-    logger.info("Encerrando Sistema de Monitoramento Residencial")
+    logger.info("Encerrando SafeAge")
     task_mqtt.cancel()
     try:
         await task_mqtt
     except asyncio.CancelledError:
         pass
-    logger.info("Sistema encerrado com sucesso")
+    logger.info("SafeAge encerrado com sucesso")
 
 
 def criar_app() -> FastAPI:
     app = FastAPI(
-        title="Sistema de Monitoramento Residencial para Idosos",
-        description="Detecta quedas, imobilidade e ausência prolongada via visão computacional.",
+        title="SafeAge",
+        description=(
+            "**Inteligência que protege.**\n\n"
+            "Sistema de monitoramento residencial para idosos via visão computacional. "
+            "Detecta quedas, imobilidade prolongada e ausência, gerando alertas em tempo real."
+        ),
         version="1.0.0",
         lifespan=lifespan,
     )
 
-    # ── Arquivos estáticos ─────────────────────────────────────────────────
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    # ── Routers da API ─────────────────────────────────────────────────────
     from api.routers.eventos import router as router_eventos
     app.include_router(router_eventos)
 
-    # ── Middleware de logging ──────────────────────────────────────────────
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
-        # Não loga assets estáticos para não poluir
         if not request.url.path.startswith("/static"):
             logger.debug("Requisição", method=request.method, path=request.url.path)
-        response = await call_next(request)
-        return response
+        return await call_next(request)
 
-    # ── Handler global de exceções ─────────────────────────────────────────
     @app.exception_handler(Exception)
     async def handler_excecao_geral(request: Request, exc: Exception):
         logger.exception("Erro não tratado", path=request.url.path)
         return JSONResponse(status_code=500, content={"erro": "Erro interno do servidor"})
 
-    # ── Rotas utilitárias ──────────────────────────────────────────────────
     @app.get("/health", tags=["infra"])
     async def health_check():
-        return {"status": "ok", "servico": "monitoramento-api"}
+        return {"status": "ok", "servico": "safeage-api"}
 
     @app.get("/", include_in_schema=False)
     async def dashboard():
-        """Redireciona raiz para o dashboard."""
         return FileResponse(str(STATIC_DIR / "dashboard.html"))
 
     return app
