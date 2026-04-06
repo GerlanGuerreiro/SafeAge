@@ -37,3 +37,11 @@ __pycache__/
 docs/
 observacoes.md
 frigate/config.yml
+
+# Mídias geradas pelo Frigate
+midias/clips/
+midias/recordings/
+midias/exports/
+
+# Config gerado automaticamente
+frigate/config.yml
