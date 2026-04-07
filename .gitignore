@@ -45,3 +45,15 @@ midias/exports/
 
 # Config gerado automaticamente
 frigate/config.yml
+
+# Mídias geradas pelo Frigate — ignorar conteúdo, manter estrutura
+midias/clips/cache/
+midias/clips/export/
+midias/clips/previews/
+midias/clips/review/
+midias/clips/thumbs/
+midias/clips/*.jpg
+midias/clips/*.webp
+midias/recordings/
+midias/exports/
+!**/.gitkeep
