@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="SafeAge — Inteligência que protege. Sistema de monitoramento residencial para idosos.">
+<meta name="description" content="SafeAge — Inteligência que protege.">
 <title>SafeAge — Inteligência que protege</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-  /* ── Paleta SafeAge ───────────────────────────────────────────────────── */
   :root {
+    --color-dark:      #081C3A;
     --color-primary:   #2A7FFF;
     --color-secondary: #A9D6FF;
     --color-bg:        #FFFFFF;
-    --color-surface:   #F4F9FF;
-    --color-border:    #D6EAFF;
+    --color-surface:   #0D2547;   /* dark ligeiramente mais claro para contraste interno */
+    --color-border:    #1A3A6A;
     --color-text:      #0D1F3C;
     --color-muted:     #5A7A9F;
     --color-danger:    #E8394A;
@@ -25,14 +25,14 @@
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--color-surface);
+    background: var(--color-dark);
     color: var(--color-text);
     min-height: 100vh;
   }
 
   /* ── Header ───────────────────────────────────────────────────────────── */
   header {
-    background: var(--color-bg);
+    background: var(--color-dark);
     border-bottom: 2px solid var(--color-border);
     padding: 0 24px;
     height: 64px;
@@ -51,17 +51,18 @@
   .brand-icon {
     width: 40px;
     height: 40px;
-    background: var(--color-primary);
     border-radius: 10px;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .brand-icon svg {
-    width: 22px;
-    height: 22px;
-    fill: #fff;
+  .brand-icon img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 10px;
   }
 
   .brand-text { line-height: 1.2; }
@@ -69,13 +70,14 @@
   .brand-name {
     font-size: 18px;
     font-weight: 700;
-    color: var(--color-primary);
+    color: var(--color-secondary);
     letter-spacing: -0.3px;
   }
 
   .brand-slogan {
     font-size: 11px;
-    color: var(--color-muted);
+    color: var(--color-secondary);
+    opacity: 0.7;
     letter-spacing: 0.03em;
   }
 
@@ -84,7 +86,7 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: var(--color-muted);
+    color: var(--color-secondary);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     padding: 6px 12px;
@@ -116,7 +118,7 @@
 
   .card {
     background: var(--color-bg);
-    border: 1px solid var(--color-border);
+    border: 1px solid #D6EAFF;
     border-radius: 12px;
     padding: 20px;
   }
@@ -167,7 +169,7 @@
     letter-spacing: 0.05em;
     margin-bottom: 16px;
     padding-bottom: 12px;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid #D6EAFF;
   }
 
   /* ── Lista de alertas ─────────────────────────────────────────────────── */
@@ -178,24 +180,25 @@
     align-items: flex-start;
     gap: 12px;
     padding: 12px;
-    background: var(--color-surface);
+    background: #F4F9FF;
     border-radius: 8px;
     border-left: 3px solid var(--color-primary);
   }
 
-  .alert-item.imobilidade    { border-left-color: var(--color-warning); }
-  .alert-item.ausencia       { border-left-color: var(--color-danger);  }
+  .alert-item.imobilidade { border-left-color: var(--color-warning); }
+  .alert-item.ausencia    { border-left-color: var(--color-danger);  }
 
   .alert-emoji { font-size: 20px; line-height: 1; }
-
   .alert-body  { flex: 1; }
-  .alert-tipo  {
+
+  .alert-tipo {
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-muted);
   }
+
   .alert-desc  { font-size: 13px; color: var(--color-text); margin-top: 2px; }
   .alert-time  { font-size: 11px; color: var(--color-muted); margin-top: 4px; }
 
@@ -209,11 +212,12 @@
   /* ── Gráfico ──────────────────────────────────────────────────────────── */
   .chart-wrap { position: relative; height: 220px; }
 
-  /* ── Footer info ──────────────────────────────────────────────────────── */
+  /* ── Footer ──────────────────────────────────────────────────────────── */
   #last-update {
     text-align: right;
     font-size: 11px;
-    color: var(--color-muted);
+    color: var(--color-secondary);
+    opacity: 0.6;
     margin-top: 16px;
   }
 </style>
@@ -222,9 +226,8 @@
 
 <header>
   <a class="brand" href="/">
-    <div class="brand-icon" style="background:none; padding:0;">
-        <img src="/static/logo.jpeg" alt="SafeAge"
-            style="width:40px; height:40px; border-radius:10px; object-fit:cover;">
+    <div class="brand-icon">
+      <img src="/static/logo.jpeg" alt="SafeAge">
     </div>
     <div class="brand-text">
       <div class="brand-name">SafeAge</div>
@@ -316,7 +319,7 @@ function renderizarGrafico(dados) {
         label: 'Eventos',
         data: valores,
         backgroundColor: 'rgba(42, 127, 255, 0.5)',
-        borderColor:     '#2A7FFF',
+        borderColor: '#2A7FFF',
         borderWidth: 1,
         borderRadius: 4,
       }]
@@ -377,11 +380,9 @@ async function atualizarDashboard() {
 
     document.getElementById('last-update').textContent =
       `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
-
     document.querySelector('.dot').style.background = '#22C55E';
 
   } catch (err) {
-    console.error('Erro ao buscar dados:', err);
     document.getElementById('last-update').textContent =
       `Erro ao conectar com a API — ${new Date().toLocaleTimeString('pt-BR')}`;
     document.querySelector('.dot').style.background = '#E8394A';
