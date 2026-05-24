@@ -167,15 +167,21 @@ def obter_resumo() -> dict:
             (SELECT COUNT(*) FROM eventos_monitoramento
              WHERE criado_em >= NOW() - INTERVAL '24 hours')                        AS eventos_24h,
             (SELECT ROUND(AVG(confianca)::numeric, 3)
-             FROM eventos_monitoramento WHERE confianca IS NOT NULL)                AS media_confianca,
-            (SELECT COUNT(DISTINCT camera) FROM eventos_monitoramento)              AS cameras_ativas;
+             FROM eventos_monitoramento
+             WHERE confianca IS NOT NULL
+               AND confianca > 0
+               AND criado_em >= NOW() - INTERVAL '24 hours')                        AS media_confianca,
+            (SELECT COUNT(DISTINCT camera) FROM eventos_monitoramento
+             WHERE criado_em >= NOW() - INTERVAL '24 hours')                        AS cameras_ativas;
     """
     sql_alertas_recentes = """
         SELECT tipo_alerta, camera, descricao, criado_em
         FROM alertas ORDER BY criado_em DESC LIMIT 5;
     """
     sql_eventos_por_hora = """
-        SELECT DATE_TRUNC('hour', criado_em) AS hora, COUNT(*) AS quantidade
+        SELECT
+            DATE_TRUNC('hour', criado_em AT TIME ZONE 'America/Manaus') AS hora,
+            COUNT(*) AS quantidade
         FROM eventos_monitoramento
         WHERE criado_em >= NOW() - INTERVAL '24 hours'
         GROUP BY hora ORDER BY hora;

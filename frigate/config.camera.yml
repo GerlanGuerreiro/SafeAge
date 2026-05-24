@@ -1,9 +1,19 @@
 mqtt:
   host: broker_mqtt
   port: 1883
+
 detectors:
   cpu1:
     type: cpu
+
+snapshots:
+  enabled: true
+  retain:
+    default: 3
+
+record:
+  enabled: true
+
 cameras:
   camera_idoso:
     ffmpeg:
@@ -11,8 +21,6 @@ cameras:
         - path: rtsp://{CAMERA_USER}:{CAMERA_PASS}@{CAMERA_HOST}:{CAMERA_PORT}/{CAMERA_ENDPOINT}
           roles:
             - detect
-        - path: rtsp://{CAMERA_USER}:{CAMERA_PASS}@{CAMERA_HOST}:{CAMERA_PORT}/{CAMERA_ENDPOINT}
-          roles:
             - record
     detect:
       enabled: true
@@ -22,10 +30,5 @@ cameras:
     objects:
       track:
         - person
-    record:
-      enabled: true
-      continuous:
-        days: 7
-    snapshots:
-      enabled: true
+
 version: 0.17-0

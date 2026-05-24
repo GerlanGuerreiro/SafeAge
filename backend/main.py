@@ -3,6 +3,14 @@ main.py
 -------
 SafeAge — Inteligência que protege.
 Ponto de entrada da aplicação FastAPI.
+
+Startup order:
+1. Logging configurado
+2. Tabelas do banco criadas
+3. Telegram: mensagem de startup
+4. Consumidor MQTT iniciado (background task)
+5. Loop de verificação comportamental iniciado (background task)
+6. API HTTP disponível
 """
 
 import asyncio
@@ -26,30 +34,41 @@ STATIC_DIR = Path(__file__).parent / "api" / "static"
 async def lifespan(app: FastAPI):
     logger.info("Iniciando SafeAge — Inteligência que protege")
 
+    # 1. Banco de dados
     try:
         from modelos import criar_tabelas
         await asyncio.to_thread(criar_tabelas)
     except Exception as e:
         logger.error("Falha ao criar tabelas no banco", erro=str(e))
 
+    # 2. Telegram startup
     try:
         from notificador import testar_conexao
         await testar_conexao()
     except Exception as e:
         logger.warning("Telegram indisponível no startup", erro=str(e))
 
+    # 3. Consumidor MQTT
     from consumidor_mqtt import iniciar_consumidor
     task_mqtt = asyncio.create_task(iniciar_consumidor())
     logger.info("Consumidor MQTT iniciado como background task")
+
+    # 4. Loop de verificação comportamental
+    from analise_comportamento import loop_verificacao
+    task_verificacao = asyncio.create_task(loop_verificacao())
+    logger.info("Loop de verificação comportamental iniciado como background task")
+
     logger.info("SafeAge pronto para monitorar")
 
     yield
 
+    # Shutdown limpo
     logger.info("Encerrando SafeAge")
     task_mqtt.cancel()
+    task_verificacao.cancel()
     try:
-        await task_mqtt
-    except asyncio.CancelledError:
+        await asyncio.gather(task_mqtt, task_verificacao, return_exceptions=True)
+    except Exception:
         pass
     logger.info("SafeAge encerrado com sucesso")
 

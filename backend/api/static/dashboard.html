@@ -12,7 +12,7 @@
     --color-primary:   #2A7FFF;
     --color-secondary: #A9D6FF;
     --color-bg:        #FFFFFF;
-    --color-surface:   #0D2547;   /* dark ligeiramente mais claro para contraste interno */
+    --color-surface:   #0D2547;
     --color-border:    #1A3A6A;
     --color-text:      #0D1F3C;
     --color-muted:     #5A7A9F;
@@ -30,7 +30,6 @@
     min-height: 100vh;
   }
 
-  /* ── Header ───────────────────────────────────────────────────────────── */
   header {
     background: var(--color-dark);
     border-bottom: 2px solid var(--color-border);
@@ -49,18 +48,13 @@
   }
 
   .brand-icon {
-    width: 40px;
-    height: 40px;
+    width: 40px; height: 40px;
     border-radius: 10px;
     overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .brand-icon img {
-    width: 40px;
-    height: 40px;
+    width: 40px; height: 40px;
     object-fit: cover;
     border-radius: 10px;
   }
@@ -71,14 +65,12 @@
     font-size: 18px;
     font-weight: 700;
     color: var(--color-secondary);
-    letter-spacing: -0.3px;
   }
 
   .brand-slogan {
     font-size: 11px;
     color: var(--color-secondary);
     opacity: 0.7;
-    letter-spacing: 0.03em;
   }
 
   .status-badge {
@@ -105,10 +97,8 @@
     50%       { opacity: 0.4; }
   }
 
-  /* ── Layout principal ─────────────────────────────────────────────────── */
   main { padding: 24px; max-width: 1200px; margin: 0 auto; }
 
-  /* ── Cards de métricas ────────────────────────────────────────────────── */
   .metrics {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -144,22 +134,15 @@
   .card-value.danger  { color: var(--color-danger);  }
   .card-value.warning { color: var(--color-warning); }
 
-  .card-sub {
-    font-size: 12px;
-    color: var(--color-muted);
-    margin-top: 6px;
-  }
+  .card-sub { font-size: 12px; color: var(--color-muted); margin-top: 6px; }
 
-  /* ── Layout inferior ──────────────────────────────────────────────────── */
   .bottom {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
   }
 
-  @media (max-width: 768px) {
-    .bottom { grid-template-columns: 1fr; }
-  }
+  @media (max-width: 768px) { .bottom { grid-template-columns: 1fr; } }
 
   .card h2 {
     font-size: 13px;
@@ -172,7 +155,6 @@
     border-bottom: 1px solid #D6EAFF;
   }
 
-  /* ── Lista de alertas ─────────────────────────────────────────────────── */
   .alert-list { display: flex; flex-direction: column; gap: 10px; }
 
   .alert-item {
@@ -199,8 +181,8 @@
     color: var(--color-muted);
   }
 
-  .alert-desc  { font-size: 13px; color: var(--color-text); margin-top: 2px; }
-  .alert-time  { font-size: 11px; color: var(--color-muted); margin-top: 4px; }
+  .alert-desc { font-size: 13px; color: var(--color-text); margin-top: 2px; }
+  .alert-time { font-size: 11px; color: var(--color-muted); margin-top: 4px; }
 
   .empty {
     text-align: center;
@@ -209,10 +191,8 @@
     padding: 24px 0;
   }
 
-  /* ── Gráfico ──────────────────────────────────────────────────────────── */
   .chart-wrap { position: relative; height: 220px; }
 
-  /* ── Footer ──────────────────────────────────────────────────────────── */
   #last-update {
     text-align: right;
     font-size: 11px;
@@ -290,17 +270,30 @@
 <script>
 const API = window.location.origin;
 let chart = null;
+// Intervalo de 30 segundos — uma única instância controlada
+let intervaloAtualizar = null;
 
 function formatarData(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('pt-BR', {
-    day: '2-digit', month: '2-digit',
-    hour: '2-digit', minute: '2-digit'
-  });
+  // O banco salva em horário local (Manaus) — sem conversão de fuso.
+  // Extraímos data e hora direto da string ISO: "2026-05-13T08:37:58.123"
+  // ex: "2026-05-13 08:37:58.123" ou "2026-05-13T08:37:58"
+  const s = iso.replace('T', ' ');
+  const partes = s.split(' ');
+  if (partes.length < 2) return iso;
+  const [ano, mes, dia] = partes[0].split('-');
+  const hora = partes[1].substring(0, 5); // "08:37"
+  return `${dia}/${mes}, ${hora}`;
 }
 
 function renderizarGrafico(dados) {
-  const labels  = dados.map(d => `${new Date(d.hora).getHours().toString().padStart(2,'0')}h`);
+  // Banco já retorna hora em Manaus (via AT TIME ZONE na query).
+  // Extrai hora direto da string ISO (posição 11-12) sem converter timezone.
+  // Ex: "2026-05-11T14:00:00" → "14h"
+  const labels  = dados.map(d => {
+    const hora = d.hora ? d.hora.substring(11, 13) : '??';
+    return `${hora}h`;
+  });
   const valores = dados.map(d => d.quantidade);
 
   if (chart) {
@@ -389,8 +382,9 @@ async function atualizarDashboard() {
   }
 }
 
+// Primeira carga e depois a cada 30 segundos
 atualizarDashboard();
-setInterval(atualizarDashboard, 30000);
+intervaloAtualizar = setInterval(atualizarDashboard, 30000);
 </script>
 </body>
 </html>

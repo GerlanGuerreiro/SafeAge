@@ -19,7 +19,12 @@ logger = get_logger(__name__)
 _BASE_URL = f"https://api.telegram.org/bot{settings.telegram_token}"
 
 _ultimo_envio: dict[str, datetime] = {}
-INTERVALO_MINIMO = timedelta(minutes=10)
+
+def _intervalo_minimo() -> timedelta:
+    # Lido a cada chamada — assim TELEGRAM_RATE_LIMIT_MINUTOS=0 no .env funciona
+    # sem precisar rebuildar a imagem. Padrão: 10 minutos em produção.
+    rate = int(os.getenv("TELEGRAM_RATE_LIMIT_MINUTOS", "10"))
+    return timedelta(minutes=rate)
 
 _EMOJIS = {
     "queda":               "🚨",
@@ -46,8 +51,8 @@ def _pode_enviar(tipo_alerta: str, camera: str) -> bool:
     chave = f"{tipo_alerta}:{camera}"
     agora = datetime.now()
     ultimo = _ultimo_envio.get(chave)
-    if ultimo and (agora - ultimo) < INTERVALO_MINIMO:
-        restante = INTERVALO_MINIMO - (agora - ultimo)
+    if ultimo and (agora - ultimo) < _intervalo_minimo():
+        restante = _intervalo_minimo() - (agora - ultimo)
         logger.debug(
             "Notificação Telegram suprimida (rate limit)",
             tipo_alerta=tipo_alerta,
@@ -63,12 +68,13 @@ def _formatar_mensagem(tipo_alerta: str, camera: str, descricao: str) -> str:
     emoji   = _EMOJIS.get(tipo_alerta, "🔔")
     titulo  = tipo_alerta.upper().replace("_", " ")
     horario = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    # HTML é mais robusto que Markdown — não quebra com underscores em nomes de câmera
     return (
-        f"{emoji} *ALERTA: {titulo}*\n\n"
-        f"📷 Câmera: `{camera}`\n"
-        f"🕐 Horário: `{horario}`\n"
+        f"{emoji} <b>ALERTA: {titulo}</b>\n\n"
+        f"📷 Câmera: <code>{camera}</code>\n"
+        f"🕐 Horário: <code>{horario}</code>\n"
         f"📋 Detalhe: {descricao}\n\n"
-        f"_Sistema de Monitoramento Residencial_"
+        f"<i>Sistema SafeAge — Inteligência que protege</i>"
     )
 
 
@@ -108,7 +114,7 @@ async def _enviar_texto(mensagem: str) -> bool:
     payload = {
         "chat_id":    settings.telegram_chat_id,
         "text":       mensagem,
-        "parse_mode": "Markdown",
+        "parse_mode": "HTML",
     }
     async with httpx.AsyncClient(timeout=10.0) as client:
         resposta = await client.post(url, json=payload)
@@ -130,7 +136,7 @@ async def _enviar_foto(legenda: str, caminho: str) -> bool:
         with open(caminho, "rb") as foto:
             resposta = await client.post(
                 url,
-                data={"chat_id": settings.telegram_chat_id, "caption": legenda, "parse_mode": "Markdown"},
+                data={"chat_id": settings.telegram_chat_id, "caption": legenda, "parse_mode": "HTML"},
                 files={"photo": foto},
             )
     if resposta.status_code == 200:
@@ -145,11 +151,11 @@ async def testar_conexao() -> bool:
 
     horario  = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     mensagem = (
-        f"✅ *Sistema de Monitoramento Online*\n\n"
-        f"🕐 Iniciado em: `{horario}`\n"
+        f"✅ <b>SafeAge Online</b>\n\n"
+        f"🕐 Iniciado em: <code>{horario}</code>\n"
         f"📡 Broker MQTT: conectado\n"
         f"🗄️ Banco de dados: conectado\n\n"
-        f"_Aguardando eventos da câmera..._"
+        f"<i>Aguardando eventos da câmera...</i>"
     )
 
     try:

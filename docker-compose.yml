@@ -62,6 +62,8 @@ services:
       - .env
     ports:
       - "8000:8000"
+    volumes:
+      - ./midias/clips:/media/frigate/clips:ro
 
 volumes:
   dados_postgres:

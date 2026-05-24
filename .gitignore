@@ -33,7 +33,8 @@ __pycache__/
 # ==============================
 # DOCS
 # ==============================
-
+COMMIT_MSG.txt
+auditoria*
 docs/
 observacoes.md
 frigate/config.yml

@@ -1,14 +1,21 @@
 """
 analise_comportamento.py
 ------------------------
-Motor de análise comportamental — agora com notificações Telegram.
+Motor de análise comportamental do SafeAge.
 
-Fluxo por evento 'end':
-  processar_evento(dados)
-    ├── salva evento no PostgreSQL
-    ├── registra presença
-    ├── verifica imobilidade → salva alerta + envia Telegram
-    └── verifica ausência   → salva alerta + envia Telegram
+LÓGICA DE IMOBILIDADE CORRIGIDA:
+O Frigate emite eventos 'update' continuamente enquanto uma pessoa está
+no frame — mesmo que ela esteja completamente parada. Isso significa que
+o timer de "último evento" fica sendo resetado, e nunca detectamos imobilidade
+com a abordagem anterior.
+
+Solução: rastrear o INÍCIO de cada evento por evento_id.
+- Se o mesmo evento_id continua em 'update' por muito tempo → imobilidade
+- Se nenhum evento aparece por muito tempo → ausência prolongada
+
+Dois estados distintos:
+1. Pessoa presente mas imóvel: evento_id ativo há > TEMPO_IMOBILIDADE
+2. Pessoa ausente: nenhum evento há > TEMPO_AUSENCIA
 """
 
 import asyncio
@@ -22,34 +29,47 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Estado em memória
 # ---------------------------------------------------------------------------
+
+# Quando vimos qualquer evento desta câmera (para detectar ausência)
 _ultimo_evento_camera: dict[str, datetime] = {}
 
-TEMPO_IMOBILIDADE = timedelta(minutes=1)
-TEMPO_AUSENCIA    = timedelta(hours=2)
+# Quando cada evento_id foi visto pela primeira vez (para detectar imobilidade)
+_inicio_evento: dict[str, datetime] = {}
 
+# Qual evento_id está ativo por câmera
+_evento_ativo_camera: dict[str, str] = {}
+
+# Caminho do snapshot gerado pelo Frigate por evento_id
+# Frigate salva em /media/frigate/clips/{evento_id}.jpg
+FRIGATE_CLIPS_DIR = "/media/frigate/clips"
+
+# Limites
+TEMPO_IMOBILIDADE       = timedelta(minutes=2)   # mesmo evento ativo por 2min = imobilidade
+TEMPO_AUSENCIA          = timedelta(minutes=10)   # nenhum evento por 10min = ausência
+INTERVALO_VERIFICACAO_S = 30   # verifica a cada 30s para reduzir delay
 JANELA_ANTI_SPAM_ALERTA = timedelta(minutes=30)
+
 _ultimo_alerta: dict[str, datetime] = {}
 
 
 # ---------------------------------------------------------------------------
-# Ponto de entrada público
+# Processamento de eventos MQTT
 # ---------------------------------------------------------------------------
 
 def processar_evento(dados: dict) -> None:
     """
-    Processa evento do Frigate: persiste, analisa e notifica.
-    Chamado via asyncio.to_thread() pelo consumidor_mqtt.
+    Processa evento do Frigate: persiste e atualiza estado de presença.
     """
-    after        = dados.get("after", {})
-    tipo_evento  = dados.get("type", "desconhecido")
-    camera       = after.get("camera", "desconhecida")
-    label        = after.get("label", "desconhecido")
-    confianca    = after.get("score", 0.0)
-    evento_id    = after.get("id", "")
-    start_time   = after.get("start_time")
-    end_time     = after.get("end_time")
+    after       = dados.get("after", {})
+    tipo_evento = dados.get("type", "desconhecido")
+    camera      = after.get("camera", "desconhecida")
+    label       = after.get("label", "desconhecido")
+    confianca   = after.get("score", 0.0)
+    evento_id   = after.get("id", "")
+    start_time  = after.get("start_time")
+    end_time    = after.get("end_time")
 
-    # ── 1. Persiste apenas eventos finalizados ────────────────────────────
+    # Persiste apenas eventos finalizados
     if tipo_evento == "end":
         inicio  = datetime.fromtimestamp(start_time) if start_time else None
         fim     = datetime.fromtimestamp(end_time)   if end_time   else None
@@ -65,53 +85,132 @@ def processar_evento(dados: dict) -> None:
             confianca         = round(confianca, 3),
             evento_id_frigate = evento_id,
         )
-
         if id_salvo:
             logger.info(
                 "Evento persistido no banco",
                 id_banco=id_salvo,
-                evento_id_frigate=evento_id,
                 camera=camera,
                 duracao_segundos=duracao,
             )
 
-    # ── 2. Atualiza presença ──────────────────────────────────────────────
-    registrar_evento(camera)
+        # Evento encerrou — limpa rastreamento e reseta anti-spam de imobilidade
+        # Motivo: se a pessoa saiu e voltou, o próximo evento deve disparar alerta
+        # normalmente, não ficar bloqueado pelo anti-spam do evento anterior
+        _inicio_evento.pop(evento_id, None)
+        if _evento_ativo_camera.get(camera) == evento_id:
+            _evento_ativo_camera.pop(camera, None)
+        # Limpa anti-spam de imobilidade para esta câmera
+        chave_imobilidade = f"imobilidade:{camera}"
+        _ultimo_alerta.pop(chave_imobilidade, None)
+        logger.debug("Anti-spam de imobilidade resetado", camera=camera)
 
-    # ── 3. Verifica comportamentos e notifica ─────────────────────────────
-    alerta_imobilidade = verificar_imobilidade(camera)
-    if alerta_imobilidade:
-        _processar_alerta(alerta_imobilidade)
+    elif tipo_evento in ("new", "update"):
+        # Registra início do evento se for novo
+        if evento_id not in _inicio_evento:
+            _inicio_evento[evento_id] = datetime.now()
+            logger.debug(
+                "Novo evento rastreado",
+                camera=camera,
+                evento_id=evento_id,
+            )
 
-    alerta_ausencia = verificar_ausencia(camera)
-    if alerta_ausencia:
-        _processar_alerta(alerta_ausencia)
+        # Atualiza evento ativo da câmera
+        _evento_ativo_camera[camera] = evento_id
+
+    # Sempre atualiza timestamp de última atividade
+    _ultimo_evento_camera[camera] = datetime.now()
+    logger.debug("Presença registrada", camera=camera)
 
 
-def _processar_alerta(alerta: dict) -> None:
+# ---------------------------------------------------------------------------
+# Loop independente de verificação
+# ---------------------------------------------------------------------------
+
+async def loop_verificacao() -> None:
     """
-    Salva alerta no banco e dispara notificação Telegram.
-    Controle anti-spam por tipo+câmera.
+    Verifica imobilidade e ausência a cada INTERVALO_VERIFICACAO_S segundos.
+    Roda como background task independente do fluxo MQTT.
     """
+    logger.info(
+        "Loop de verificação comportamental iniciado",
+        intervalo_segundos=INTERVALO_VERIFICACAO_S,
+        limiar_imobilidade=str(TEMPO_IMOBILIDADE),
+        limiar_ausencia=str(TEMPO_AUSENCIA),
+    )
+
+    while True:
+        await asyncio.sleep(INTERVALO_VERIFICACAO_S)
+
+        if not _ultimo_evento_camera:
+            logger.debug("Loop: nenhuma câmera registrada ainda")
+            continue
+
+        agora = datetime.now()
+
+        for camera in list(_ultimo_evento_camera.keys()):
+            ultimo = _ultimo_evento_camera[camera]
+            tempo_sem_evento = agora - ultimo
+
+            logger.debug(
+                "Verificando câmera",
+                camera=camera,
+                sem_evento_ha=str(tempo_sem_evento).split(".")[0],
+                evento_ativo=_evento_ativo_camera.get(camera, "nenhum"),
+            )
+
+            # ── Ausência prolongada ───────────────────────────────────────
+            # Nenhum evento chegou por TEMPO_AUSENCIA
+            if tempo_sem_evento > TEMPO_AUSENCIA:
+                await _processar_alerta_async({
+                    "tipo_alerta": "ausencia_prolongada",
+                    "camera":      camera,
+                    "tempo":       str(tempo_sem_evento).split(".")[0],
+                })
+                continue
+
+            # ── Imobilidade ───────────────────────────────────────────────
+            # Mesmo evento_id ativo há muito tempo → pessoa parada
+            evento_id_ativo = _evento_ativo_camera.get(camera)
+            if evento_id_ativo and evento_id_ativo in _inicio_evento:
+                duracao_evento = agora - _inicio_evento[evento_id_ativo]
+                logger.debug(
+                    "Evento ativo há",
+                    camera=camera,
+                    evento_id=evento_id_ativo,
+                    duracao=str(duracao_evento).split(".")[0],
+                )
+                if duracao_evento > TEMPO_IMOBILIDADE:
+                    await _processar_alerta_async({
+                        "tipo_alerta":         "imobilidade",
+                        "camera":              camera,
+                        "tempo_sem_movimento": str(duracao_evento).split(".")[0],
+                    })
+
+
+# ---------------------------------------------------------------------------
+# Processamento de alertas
+# ---------------------------------------------------------------------------
+
+async def _processar_alerta_async(alerta: dict) -> None:
     tipo   = alerta.get("tipo_alerta", "desconhecido")
     camera = alerta.get("camera", "desconhecida")
     chave  = f"{tipo}:{camera}"
     agora  = datetime.now()
 
-    # Anti-spam
     ultimo = _ultimo_alerta.get(chave)
     if ultimo and (agora - ultimo) < JANELA_ANTI_SPAM_ALERTA:
         logger.debug(
             "Alerta suprimido (anti-spam)",
             tipo_alerta=tipo,
             camera=camera,
+            proximo_em=str(JANELA_ANTI_SPAM_ALERTA - (agora - ultimo)).split(".")[0],
         )
         return
 
     descricao = _formatar_descricao(alerta)
 
-    # Salva no banco
-    id_alerta = salvar_alerta(
+    id_alerta = await asyncio.to_thread(
+        salvar_alerta,
         tipo_alerta=tipo,
         camera=camera,
         descricao=descricao,
@@ -120,29 +219,58 @@ def _processar_alerta(alerta: dict) -> None:
     if id_alerta:
         _ultimo_alerta[chave] = agora
         logger.warning(
-            "Alerta gerado",
+            "Alerta gerado e salvo",
             id_alerta=id_alerta,
             tipo_alerta=tipo,
             camera=camera,
+            descricao=descricao,
         )
-
-        # Dispara Telegram em background — não bloqueia o processamento
-        # Usa asyncio.run_coroutine_threadsafe pois estamos numa thread síncrona
-        # (chamada via asyncio.to_thread pelo consumidor_mqtt)
         try:
-            loop = asyncio.get_event_loop()
             from notificador import enviar_alerta
-            loop.call_soon_threadsafe(
-                lambda: asyncio.ensure_future(
-                    enviar_alerta(
-                        tipo_alerta=tipo,
-                        camera=camera,
-                        descricao=descricao,
-                    )
-                )
+            import os
+
+            # Busca snapshot do evento ativo
+            # Frigate salva como: {camera}-{evento_id}.jpg
+            # Estratégia: tenta pelo evento_id exato; se não achar, pega o .jpg
+            # mais recente da câmera no diretório de clips.
+            snapshot = None
+            evento_id_ativo = _evento_ativo_camera.get(camera)
+            if evento_id_ativo:
+                caminho_exato = f"{FRIGATE_CLIPS_DIR}/{camera}-{evento_id_ativo}.jpg"
+                if os.path.exists(caminho_exato):
+                    snapshot = caminho_exato
+                    logger.debug("Snapshot encontrado pelo evento_id", caminho=snapshot)
+                else:
+                    # Fallback: pega o .jpg mais recente desta câmera
+                    try:
+                        import glob
+                        padrao = f"{FRIGATE_CLIPS_DIR}/{camera}-*.jpg"
+                        candidatos = glob.glob(padrao)
+                        if candidatos:
+                            snapshot = max(candidatos, key=os.path.getmtime)
+                            logger.debug("Snapshot mais recente usado", caminho=snapshot)
+                        else:
+                            logger.debug("Nenhum snapshot encontrado", padrao=padrao)
+                    except Exception as e_glob:
+                        logger.warning("Erro ao buscar snapshot", erro=str(e_glob))
+
+            await enviar_alerta(
+                tipo_alerta=tipo,
+                camera=camera,
+                descricao=descricao,
+                caminho_snapshot=snapshot,
             )
+
+            # Apaga snapshot após envio para não acumular arquivos
+            if snapshot and os.path.exists(snapshot):
+                try:
+                    os.remove(snapshot)
+                    logger.debug("Snapshot removido após envio", caminho=snapshot)
+                except Exception as e_rm:
+                    logger.warning("Falha ao remover snapshot", erro=str(e_rm))
+
         except Exception as e:
-            logger.error("Erro ao agendar notificação Telegram", erro=str(e))
+            logger.error("Erro ao enviar notificação Telegram", erro=str(e))
 
 
 def _formatar_descricao(alerta: dict) -> str:
@@ -158,39 +286,3 @@ def _formatar_descricao(alerta: dict) -> str:
         return f"Nenhuma presença detectada por {tempo} na câmera {camera}"
 
     return f"Alerta do tipo '{tipo}' na câmera {camera}"
-
-
-# ---------------------------------------------------------------------------
-# Funções de análise
-# ---------------------------------------------------------------------------
-
-def registrar_evento(camera: str) -> None:
-    _ultimo_evento_camera[camera] = datetime.now()
-
-
-def verificar_imobilidade(camera: str) -> dict | None:
-    if camera not in _ultimo_evento_camera:
-        return None
-    agora  = datetime.now()
-    ultimo = _ultimo_evento_camera[camera]
-    if agora - ultimo > TEMPO_IMOBILIDADE:
-        return {
-            "tipo_alerta":         "imobilidade",
-            "camera":              camera,
-            "tempo_sem_movimento": str(agora - ultimo).split(".")[0],
-        }
-    return None
-
-
-def verificar_ausencia(camera: str) -> dict | None:
-    if camera not in _ultimo_evento_camera:
-        return None
-    agora  = datetime.now()
-    ultimo = _ultimo_evento_camera[camera]
-    if agora - ultimo > TEMPO_AUSENCIA:
-        return {
-            "tipo_alerta": "ausencia_prolongada",
-            "camera":      camera,
-            "tempo":       str(agora - ultimo).split(".")[0],
-        }
-    return None
