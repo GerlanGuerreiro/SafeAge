@@ -51,7 +51,7 @@
 
 O SafeAge é um sistema de monitoramento residencial com inteligência artificial para detecção de comportamentos anômalos em idosos. O sistema usa uma câmera IP/RTSP integrada ao Frigate NVR (detector YOLO) e analisa continuamente dois padrões de risco:
 
-- **Imobilidade prolongada** — pessoa presente no frame sem movimento por tempo configurable
+- **Imobilidade prolongada** — pessoa presente no frame sem movimento por tempo configurado
 - **Ausência prolongada** — nenhuma detecção de presença por tempo configurável
 
 Quando um padrão de risco é identificado, o sistema dispara alertas automáticos via **Telegram** (com snapshot da câmera) e registra tudo em um **dashboard web** em tempo real.
@@ -547,11 +547,11 @@ Base URL: `http://localhost:8000`
 | Nome | Função | GitHub | LinkedIn |
 |---|---|---|---|
 | **Gerlan Guerreiro** | Tech Lead & Backend | [github.com/GerlanGuerreiro](https://github.com/GerlanGuerreiro) | [linkedin.com/in/gerlan](https://linkedin.com/in/gerlan) |
-| **Membro 2** | Desenvolvedor | [github.com/membro2](https://github.com/membro2) | [linkedin.com/in/membro2](https://linkedin.com/in/membro2) |
-| **Membro 3** | Desenvolvedor | [github.com/membro3](https://github.com/membro3) | [linkedin.com/in/membro3](https://linkedin.com/in/membro3) |
-| **Membro 4** | QA & Testes | [github.com/membro4](https://github.com/membro4) | [linkedin.com/in/membro4](https://linkedin.com/in/membro4) |
-| **Membro 5** | DevOps & Infra | [github.com/membro5](https://github.com/membro5) | [linkedin.com/in/membro5](https://linkedin.com/in/membro5) |
-| **Membro 6** | Documentação | [github.com/membro6](https://github.com/membro6) | [linkedin.com/in/membro6](https://linkedin.com/in/membro6) |
+| **Lucas Maia** | Desenvolvedor | [github.com/LucasMaia](https://github.com/lucasmaia27) | [linkedin.com/in/lucasmaia](www.linkedin.com/in/lucas-del-aguilla-dev) |
+| **Gabriel Fernando** | Desenvolvedor | [github.com/GabrielFernando](https://github.com/GabrielF157) | [linkedin.com/in/membro3](https://linkedin.com/in/membro3) |
+| **Miguel Antony** | QA & Testes | [github.com/MiguelAntony](https://github.com/MiguelAts) | [linkedin.com/in/MiguelAntony](https://www.linkedin.com/in/miguel-santos-248526303?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app) |
+| **João Gustavo** | DevOps & Infra | [github.com/JoaoGustavo](https://github.com/SukitaAM) | [linkedin.com/in/membro5](https://linkedin.com/in/membro5) |
+| **Enison Neves** | Documentação | [github.com/EnisonNeves](https://github.com/enisonevs) | [linkedin.com/in/enisonneves](https://www.linkedin.com/in/ennysson/) |
 
 > ⚠️ **Atenção:** Substitua os campos de Membro 2 a 6 com os nomes, links do GitHub e LinkedIn reais de cada integrante.
 
