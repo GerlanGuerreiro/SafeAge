@@ -47,6 +47,9 @@ services:
     env_file:
       - .env
     entrypoint: ["/bin/sh", "/gerar_config.sh"]
+    networks:
+      - default
+      - rede_camera_virtual
 
   # ========================================
   # BACKEND FASTAPI
@@ -67,3 +70,9 @@ services:
 
 volumes:
   dados_postgres:
+
+networks:
+  default: # Rede padrão do próprio sistema do idoso
+  rede_camera_virtual:
+    name: rede_compartilhada_nvr # <-- ADICIONE ESSA LINHA
+    external: true # CORRIGIDO: Agora indentado corretamente sob a rede externa

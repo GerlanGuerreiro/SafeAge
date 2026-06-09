@@ -1,0 +1,25 @@
+networks:
+  rede_cameras:
+    name: rede_compartilhada_nvr # Nome da rede que o Frigate também vai usar
+    driver: bridge
+
+services:
+  # Servidor RTSP que recebe o sinal do Python e entrega para o Frigate
+  servidor_rtsp:
+    image: bluenviron/mediamtx:latest
+    container_name: camera_virtual_server
+    ports:
+      - "8554:8554" # Porta RTSP exposta
+    networks:
+      - rede_cameras
+
+  # O script que lê o seu vídeo e injeta no servidor acima
+  gerador_fluxo:
+    build: .
+    container_name: camera_virtual_app
+    restart: unless-stopped
+    volumes:
+      - ./videos:/app/videos:ro
+    network_mode: "service:servidor_rtsp" # Faz o script rodar na MESMA rede local do servidor
+    depends_on:
+      - servidor_rtsp

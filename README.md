@@ -39,7 +39,7 @@
 | Campo | Valor |
 |---|---|
 | **Nome** | SafeAge — Sistema Inteligente de Monitoramento Residencial para Idosos |
-| **Versão** | 1.0.0 |
+| **Versão** | 1.1.0 |
 | **Disciplina** | Projeto Integrador / Engenharia de Software |
 | **Status** | ✅ Em produção (ambiente local containerizado) |
 | **Repositório** | https://github.com/GerlanGuerreiro/SafeAge |
@@ -243,6 +243,12 @@ docker compose up -d
 # 4. Acesse o dashboard
 # http://localhost:8000
 ```
+<p align="center">
+  <img src="assets/images/inicializar.png" alt="Inicializar Sistema" width="800px">
+</p>
+<p align="center">
+  <img src="assets/images/dashboardSafeAge.png" alt="Dashboard do SafeAge" width="800px">
+</p>
 
 ### Verificar se está tudo saudável
 
@@ -253,6 +259,9 @@ docker ps
 docker logs api_monitoramento --tail 20
 # Deve exibir "SafeAge pronto para monitorar"
 ```
+<p align="center">
+  <img src="assets/images/verificarsaude.png" alt="Verificar Saúde do Sistema" width="800px">
+</p>
 
 ---
 
@@ -365,6 +374,9 @@ docker exec -it banco_monitoramento psql -U postgres -d monitoramento \
 docker run --rm -v "$(pwd)/midias:/midias" alpine \
   sh -c "find /midias/clips -name '*.jpg' -delete && find /midias/recordings -name '*.mp4' -delete"
 ```
+<p align="center">
+  <img src="assets/images/limpezatestes.png" alt="Limpeza para Testes" width="800px">
+</p>
 
 ---
 
@@ -548,12 +560,11 @@ Base URL: `http://localhost:8000`
 |---|---|---|---|
 | **Gerlan Guerreiro** | Tech Lead & Backend | [github.com/GerlanGuerreiro](https://github.com/GerlanGuerreiro) | [linkedin.com/in/gerlan](https://linkedin.com/in/gerlan) |
 | **Lucas Maia** | Desenvolvedor | [github.com/LucasMaia](https://github.com/lucasmaia27) | [linkedin.com/in/lucasmaia](www.linkedin.com/in/lucas-del-aguilla-dev) |
-| **Gabriel Fernando** | Desenvolvedor | [github.com/GabrielFernando](https://github.com/GabrielF157) | [linkedin.com/in/membro3](https://linkedin.com/in/membro3) |
+| **Gabriel Fernando** | Desenvolvedor | [github.com/GabrielFernando](https://github.com/GabrielF157) | [linkedin.com/in/GabrielFernando](https://www.linkedin.com/in/gabrielfernando-/) |
 | **Miguel Antony** | QA & Testes | [github.com/MiguelAntony](https://github.com/MiguelAts) | [linkedin.com/in/MiguelAntony](https://www.linkedin.com/in/miguel-santos-248526303?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app) |
-| **João Gustavo** | DevOps & Infra | [github.com/JoaoGustavo](https://github.com/SukitaAM) | [linkedin.com/in/membro5](https://linkedin.com/in/membro5) |
+| **João Gustavo** | DevOps & Infra | [github.com/JoaoGustavo](https://github.com/JoaoGustavoVasconcelos) | [linkedin.com/in/JoãoGustavo](https://www.linkedin.com/in/joao-gustavo-goncalves-vasconcelos) |
 | **Enison Neves** | Documentação | [github.com/EnisonNeves](https://github.com/enisonevs) | [linkedin.com/in/enisonneves](https://www.linkedin.com/in/ennysson/) |
-
-> ⚠️ **Atenção:** Substitua os campos de Membro 2 a 6 com os nomes, links do GitHub e LinkedIn reais de cada integrante.
+| **Luana Leal** | Orientadora | [github.com/ProfaLuanaLeal](https://github.com/ProfaLuanaLeal ) | [linkedin.com/in/LuanaLeal](https://www.linkedin.com/in/luanalealm/) |
 
 ---
 
@@ -566,6 +577,7 @@ Base URL: `http://localhost:8000`
 | 0.3.0 | Abr/2026 | Dashboard web, gráficos, fuso horário |
 | 0.4.0 | Mai/2026 | Snapshots no Telegram, rate limit dinâmico, config Frigate otimizada |
 | 1.0.0 | Mai/2026 | Versão estável — horários corrigidos, armazenamento controlado |
+| 1.1.0 | Jun/2026 | Adção de Funcionalidade - Camera Virtual para testes, Imagens do Sistema |
 
 ---
 

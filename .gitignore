@@ -2,8 +2,10 @@
 # ARQUIVOS SENSÍVEIS
 # ==============================
 
+*.txt
+*.sh
 .env
-
+camera_virtual/videos/*
 
 # ==============================
 # MIDIAS FRIGATE

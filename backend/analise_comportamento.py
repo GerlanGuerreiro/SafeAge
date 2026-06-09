@@ -45,9 +45,9 @@ FRIGATE_CLIPS_DIR = "/media/frigate/clips"
 
 # Limites
 TEMPO_IMOBILIDADE       = timedelta(minutes=2)   # mesmo evento ativo por 2min = imobilidade
-TEMPO_AUSENCIA          = timedelta(minutes=10)   # nenhum evento por 10min = ausência
+TEMPO_AUSENCIA          = timedelta(minutes=3)   # nenhum evento por 10min = ausência
 INTERVALO_VERIFICACAO_S = 30   # verifica a cada 30s para reduzir delay
-JANELA_ANTI_SPAM_ALERTA = timedelta(minutes=30)
+JANELA_ANTI_SPAM_ALERTA = timedelta(minutes=0)
 
 _ultimo_alerta: dict[str, datetime] = {}
 
