@@ -5,7 +5,6 @@
 *.txt
 *.sh
 .env
-camera_virtual/videos/*
 
 # ==============================
 # MIDIAS FRIGATE
@@ -60,3 +59,10 @@ midias/clips/*.webp
 midias/recordings/
 midias/exports/
 !**/.gitkeep
+
+# ==============================
+# EXCEÇÕES
+# ==============================
+# EXCEÇÃO: Não ignorar as imagens de documentação do sistema
+!assets/images/*
+!camera_virtual/videos/.gitkeep
